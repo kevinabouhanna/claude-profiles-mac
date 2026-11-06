@@ -33,6 +33,11 @@ final class SettingsUI: ObservableObject {
     @Published var pane: Pane? = .general {
         didSet { SettingsWindow.visibleWindow?.title = (pane ?? .general).title }
     }
+    /// The account row a dragged account is over, which it'll take the place of.
+    /// Here, not `@State`: plain swiftc can't load SwiftUI's macros.
+    @Published var dropTarget: Int?
+    /// The account row under the pointer, which shows its drag handle.
+    @Published var hoveredAccount: Int?
 }
 
 @MainActor
@@ -150,6 +155,14 @@ struct GeneralPane: View {
 struct AccountsPane: View {
     @ObservedObject var store = Store.shared
     @ObservedObject var flow = AddAccountFlow.shared
+    @ObservedObject var ui = SettingsUI.shared
+
+    /// A dragged row carries its slot number as text, tagged so that text dropped
+    /// from elsewhere is ignored.
+    private static let dragPrefix = "claude-profiles-account:"
+    private static func draggedNumber(_ text: String) -> Int? {
+        text.hasPrefix(dragPrefix) ? Int(text.dropFirst(dragPrefix.count)) : nil
+    }
 
     var body: some View {
         Form {
@@ -157,9 +170,34 @@ struct AccountsPane: View {
                 if store.accounts.isEmpty {
                     Text("No accounts yet.").foregroundStyle(.secondary)
                 }
-                ForEach(store.accounts) { SettingsAccountRow(store: store, account: $0) }
+                // Drag and drop rather than `.onMove`: a grouped Form on macOS isn't a
+                // table underneath, and ignores it.
+                ForEach(store.accounts) { account in
+                    SettingsAccountRow(store: store, account: account, reorderable: store.accounts.count > 1,
+                                       showsHandle: ui.hoveredAccount == account.number && !store.busy)
+                        .contentShape(Rectangle())
+                        .onHover { inside in
+                            if inside { ui.hoveredAccount = account.number } else if ui.hoveredAccount == account.number { ui.hoveredAccount = nil }
+                        }
+                        .draggable(Self.dragPrefix + String(account.number))
+                        .dropDestination(for: String.self) { items, _ in
+                            guard let dragged = items.first.flatMap(Self.draggedNumber) else { return false }
+                            store.place(dragged, at: account)
+                            return true
+                        } isTargeted: { targeted in
+                            if targeted { ui.dropTarget = account.number } else if ui.dropTarget == account.number { ui.dropTarget = nil }
+                        }
+                        .background {
+                            if ui.dropTarget == account.number {
+                                RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.18)).padding(-6)
+                            }
+                        }
+                }
             } header: {
                 Text("Accounts")
+                if store.accounts.count > 1 {
+                    Text("Drag to change the order Next Account goes in.")
+                }
             } footer: {
                 HStack {
                     Spacer()
@@ -168,22 +206,16 @@ struct AccountsPane: View {
             }
             Section("Switch Account") {
                 LabeledContent {
-                    Button("Rotate") { store.switchUsing(strategy: nil) }
+                    Button("Switch") { store.switchUsing(strategy: "next-available") }
                 } label: {
                     Text("Next Account")
-                    Text("Moves to the next account in order.")
+                    Text("Goes down the list above, skipping any account that's reached a limit.")
                 }
                 LabeledContent {
                     Button("Switch") { store.switchUsing(strategy: "best") }
                 } label: {
                     Text("Most Available")
-                    Text("Jumps to the account with the most usage left.")
-                }
-                LabeledContent {
-                    Button("Switch") { store.switchUsing(strategy: "next-available") }
-                } label: {
-                    Text("Next Available")
-                    Text("Moves to the next account that hasn't reached a limit.")
+                    Text("Jumps to the account with the most usage left, wherever it is in the list.")
                 }
             }
             .disabled(store.accounts.count < 2 || store.busy)
@@ -194,6 +226,10 @@ struct AccountsPane: View {
 struct SettingsAccountRow: View {
     @ObservedObject var store: Store
     let account: Account
+    /// Room is kept for the handle whenever there's more than one account, so the
+    /// row doesn't shift when it appears.
+    var reorderable = false
+    var showsHandle = false
 
     private var isActive: Bool { account.active == true }
 
@@ -216,6 +252,11 @@ struct SettingsAccountRow: View {
                         Button("Save Current Login") { store.perform(["add"], failure: "Couldn't save the current login.") }
                     }
                     Divider()
+                    Button("Move Up") { store.move(account, by: -1) }
+                        .disabled(store.busy || store.accounts.first?.number == account.number)
+                    Button("Move Down") { store.move(account, by: 1) }
+                        .disabled(store.busy || store.accounts.last?.number == account.number)
+                    Divider()
                     Button("Remove…", role: .destructive, action: remove)
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -227,6 +268,15 @@ struct SettingsAccountRow: View {
             }
         } label: {
             HStack(spacing: 10) {
+                if reorderable {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 14)
+                        .opacity(showsHandle ? 1 : 0)
+                        .help("Drag to reorder")
+                        .accessibilityHidden(true)
+                }
                 Text(account.initials)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -240,6 +290,7 @@ struct SettingsAccountRow: View {
                     Text(detail).font(.caption).foregroundStyle(.secondary)
                 }
             }
+            .pointerStyle(showsHandle ? .grabIdle : nil)
         }
     }
 
