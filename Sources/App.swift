@@ -10,10 +10,15 @@ final class StatusController: NSObject, NSPopoverDelegate {
     private let popover = NSPopover()
     private var bag = Set<AnyCancellable>()
     private var appearanceObservation: NSKeyValueObservation?
-    /// Whether the menu bar was dark at the last redraw. Setting the button's image makes
-    /// it report its appearance again, so redrawing on every report looped forever,
-    /// holding a CPU core at 100%. Only a real light/dark change redraws.
-    private var drawnDark: Bool?
+    /// Every redraw goes through `requestRedraw()`, which makes a feedback loop cheap by
+    /// construction. Setting the button's image makes it report its appearance again, so
+    /// redrawing on every report once looped forever and held a CPU core at 100%. Now an
+    /// unchanged picture is never drawn twice, and requests are merged and rate-limited.
+    private var redrawPending = false
+    private var lastRedraw = Date.distantPast
+    private var drawnKey: String?
+    private(set) var redrawCount = 0
+    private(set) var skippedRedraws = 0
     private var clickCount = 0
     /// Closes the dropdown on clicks in other apps, the menu bar included.
     private var outsideClickMonitor: Any?
@@ -64,16 +69,15 @@ final class StatusController: NSObject, NSPopoverDelegate {
 
         Store.shared.$accounts
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.redraw() }
+            .sink { [weak self] _ in self?.requestRedraw() }
             .store(in: &bag)
-        Prefs.shared.onStyleChange = { [weak self] in self?.redraw() }
-        appearanceObservation = button.observe(\.effectiveAppearance) { [weak self] button, _ in
-            Task { @MainActor in
-                guard let self, self.isDark(button) != self.drawnDark else { return }
-                self.redraw()
-            }
+        Prefs.shared.onStyleChange = { [weak self] in self?.requestRedraw() }
+        // Not a reason to redraw by itself: `redraw` skips it unless light/dark changed.
+        appearanceObservation = button.observe(\.effectiveAppearance) { [weak self] _, _ in
+            Task { @MainActor in self?.requestRedraw() }
         }
-        redraw()
+        EnergyGuard.shared.start()
+        requestRedraw()
         listenForTestCommands()
     }
 
@@ -85,6 +89,12 @@ final class StatusController: NSObject, NSPopoverDelegate {
             name: Notification.Name("com.kevinabouhanna.ClaudeProfiles.test"), object: nil,
             suspensionBehavior: .deliverImmediately
         )
+        // Addressed to this process alone, so the energy test never drives the copy in use.
+        DistributedNotificationCenter.default().addObserver(
+            self, selector: #selector(testCommand(_:)),
+            name: Notification.Name("com.kevinabouhanna.ClaudeProfiles.test.\(getpid())"), object: nil,
+            suspensionBehavior: .deliverImmediately
+        )
     }
 
     @objc private func testCommand(_ note: Notification) {
@@ -94,6 +104,14 @@ final class StatusController: NSObject, NSPopoverDelegate {
         case "close":
             closePopover()
             SettingsWindow.visibleWindow?.close()
+        // Flips the button's appearance, the change that once started the redraw loop.
+        case "appearance-dark": item.button?.appearance = NSAppearance(named: .darkAqua)
+        case "appearance-light": item.button?.appearance = NSAppearance(named: .aqua)
+        case "appearance-system": item.button?.appearance = nil
+        case "counters":
+            let guardState = EnergyGuard.shared
+            let info = "redraws=\(redrawCount) skipped=\(skippedRedraws) refreshes=\(Store.shared.refreshCount) throttled=\(guardState.throttled) lastCPU=\(String(format: "%.2f", guardState.lastPercent)) peakCPU=\(String(format: "%.2f", guardState.peakPercent))\n"
+            try? info.write(toFile: NSTemporaryDirectory() + "claude-profiles-counters-\(getpid()).txt", atomically: true, encoding: .utf8)
         case "status":
             let frame = item.button?.window?.frame ?? .zero
             let info = "frame=\(frame) image=\(item.button?.image?.size ?? .zero) visible=\(item.isVisible) popover=\(popover.isShown) popoverWindow=\(popover.contentViewController?.view.window?.frame ?? .zero) onScreen=\(popover.contentViewController?.view.window?.isVisible ?? false) clicks=\(clickCount) text=\(item.button?.toolTip ?? "")\n"
@@ -102,12 +120,39 @@ final class StatusController: NSObject, NSPopoverDelegate {
         }
     }
 
+    /// The only way to ask for a redraw. Requests arriving together become one, and they're
+    /// spaced at least `minimumInterval` apart: 0.25 s normally, 10 s if `EnergyGuard`
+    /// has seen the app burning CPU.
+    private func requestRedraw() {
+        guard !redrawPending else { return }
+        redrawPending = true
+        let minimumInterval: TimeInterval = EnergyGuard.shared.throttled ? 10 : 0.25
+        let delay = max(0, lastRedraw.addingTimeInterval(minimumInterval).timeIntervalSinceNow)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self else { return }
+            self.redrawPending = false
+            self.lastRedraw = Date()
+            self.redraw()
+        }
+    }
+
     private func redraw() {
         guard let button = item.button else { return }
         let style = Prefs.shared.style
         let account = Store.shared.activeAccount
         let dark = isDark(button)
-        drawnDark = dark
+        // Everything the picture depends on. The same key means the same image, so it
+        // isn't drawn again; this is what ends a loop where drawing triggers a request.
+        let key = [
+            MenuBarImage.plainText(account, style), "\(style)", "\(dark)",
+            "\(account?.session?.severity as Any)", "\(account?.weekly?.severity as Any)",
+        ].joined(separator: "|")
+        guard key != drawnKey else {
+            skippedRedraws += 1
+            return
+        }
+        drawnKey = key
+        redrawCount += 1
         if Prefs.shared.menuBarIsDark != dark { Prefs.shared.menuBarIsDark = dark }
         button.image = MenuBarImage.render(account, style, dark: dark, template: style.colorMode == .system)
         let text = MenuBarImage.plainText(account, style)
@@ -359,12 +404,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var status: StatusController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        Migration.fromClaudeUsageBar()  // before anything reads settings
+        // `scripts/energy-test.sh` runs a second copy with `-energyTest YES`. It shares this
+        // Mac's settings, so it must leave the real copy's Auto-Switch process alone.
+        let energyTest = UserDefaults.standard.bool(forKey: "energyTest")
+        if !energyTest { Migration.fromClaudeUsageBar() }  // before anything reads settings
         NSApp.mainMenu = Self.makeMainMenu()
-        AutoSwitcher.shared.cleanUpOrphan()
+        if !energyTest { AutoSwitcher.shared.cleanUpOrphan() }
         status = StatusController()
         Store.shared.start()
-        AutoSwitcher.shared.sync()
+        if !energyTest { AutoSwitcher.shared.sync() }
     }
 
     /// The Dock icon, there while Settings is open.

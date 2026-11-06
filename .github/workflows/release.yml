@@ -26,6 +26,14 @@ jobs:
       - name: Show the toolchain
         run: swiftc --version && xcrun --show-sdk-version
 
+      # A build that burns CPU or leaks must not become a notarized release. Checked
+      # before signing, so a failure costs minutes rather than a notarization round.
+      - name: Energy test
+        run: |
+          pipx install claude-swap || echo "claude-swap didn't install; testing without it"
+          ./build.sh
+          ./scripts/energy-test.sh
+
       - name: Build, sign, notarize and package
         env:
           MARKETING_VERSION: ${{ steps.version.outputs.value }}

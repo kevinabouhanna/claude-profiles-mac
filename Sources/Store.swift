@@ -73,6 +73,7 @@ final class Store: ObservableObject {
     @Published var cswapVersion = ""
 
     private var timer: Timer?
+    private(set) var refreshCount = 0
     private var lastActive: Int?
 
     var activeAccount: Account? { accounts.first { $0.active == true } }
@@ -97,6 +98,8 @@ final class Store: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: TimeInterval(Prefs.shared.refreshInterval), repeats: true) { _ in
             Task { @MainActor in Store.shared.refresh() }
         }
+        // Leeway lets macOS batch this wakeup with others, which saves energy.
+        timer?.tolerance = TimeInterval(Prefs.shared.refreshInterval) * 0.1
     }
 
     func load(_ data: Data) -> Bool {
@@ -117,6 +120,7 @@ final class Store: ObservableObject {
     func refresh() {
         guard !loading else { return }
         loading = true
+        refreshCount += 1
         Task.detached {
             let result = CLI.run(CLI.cswap, ["list", "--json"], mergeStderr: false)
             await MainActor.run {

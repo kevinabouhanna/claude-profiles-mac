@@ -16,3 +16,11 @@ jobs:
         run: ./build.sh
       - name: Check both architectures are in
         run: lipo -archs "build/Claude Profiles.app/Contents/MacOS/ClaudeProfiles"
+      # claude-swap gives the app real refreshes to run; without it the test still
+      # covers the menu bar, dropdown and Settings.
+      - name: Install claude-swap
+        run: pipx install claude-swap || echo "claude-swap didn't install; testing without it"
+      # Fails on excess CPU, redraws, memory growth or a leftover child process.
+      # See scripts/energy-test.sh for the limits.
+      - name: Energy test
+        run: ./scripts/energy-test.sh

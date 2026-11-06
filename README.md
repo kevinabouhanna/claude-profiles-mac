@@ -65,6 +65,14 @@ Needs the Xcode command line tools (Swift 6) on macOS 26 or later.
 ./build.sh --install   # and copy it to /Applications and launch it
 ```
 
+Before sending a change, run the energy test: it launches its own copy of the app, safely
+alongside one you have open, and fails on excess CPU, memory growth or leftover processes.
+CI and the release workflow run it too, and a release can't be cut if it fails.
+
+```sh
+./scripts/energy-test.sh
+```
+
 `./build.sh --release` signs with a Developer ID, notarizes, staples and builds a disk image; see the
 top of `build.sh` for what it needs. Releases are cut by pushing a `v*` tag, which runs
 `.github/workflows/release.yml`. It needs these repository secrets:
