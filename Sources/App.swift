@@ -10,6 +10,10 @@ final class StatusController: NSObject, NSPopoverDelegate {
     private let popover = NSPopover()
     private var bag = Set<AnyCancellable>()
     private var appearanceObservation: NSKeyValueObservation?
+    /// Whether the menu bar was dark at the last redraw. Setting the button's image makes
+    /// it report its appearance again, so redrawing on every report looped forever,
+    /// holding a CPU core at 100%. Only a real light/dark change redraws.
+    private var drawnDark: Bool?
     private var clickCount = 0
     /// Closes the dropdown on clicks in other apps, the menu bar included.
     private var outsideClickMonitor: Any?
@@ -63,8 +67,11 @@ final class StatusController: NSObject, NSPopoverDelegate {
             .sink { [weak self] _ in self?.redraw() }
             .store(in: &bag)
         Prefs.shared.onStyleChange = { [weak self] in self?.redraw() }
-        appearanceObservation = button.observe(\.effectiveAppearance) { [weak self] _, _ in
-            Task { @MainActor in self?.redraw() }
+        appearanceObservation = button.observe(\.effectiveAppearance) { [weak self] button, _ in
+            Task { @MainActor in
+                guard let self, self.isDark(button) != self.drawnDark else { return }
+                self.redraw()
+            }
         }
         redraw()
         listenForTestCommands()
@@ -99,12 +106,17 @@ final class StatusController: NSObject, NSPopoverDelegate {
         guard let button = item.button else { return }
         let style = Prefs.shared.style
         let account = Store.shared.activeAccount
-        let dark = button.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let dark = isDark(button)
+        drawnDark = dark
         if Prefs.shared.menuBarIsDark != dark { Prefs.shared.menuBarIsDark = dark }
         button.image = MenuBarImage.render(account, style, dark: dark, template: style.colorMode == .system)
         let text = MenuBarImage.plainText(account, style)
         button.toolTip = "Claude usage: \(text)"
         button.setAccessibilityLabel("Claude usage \(text)")
+    }
+
+    private func isDark(_ button: NSStatusBarButton) -> Bool {
+        button.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 
     @objc private func clicked() {

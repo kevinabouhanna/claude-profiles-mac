@@ -63,9 +63,13 @@ struct RawWindow: Decodable {
 
 /// cswap emits both `...Z` and `....442230+00:00`; the fraction is irrelevant here
 /// and ISO8601DateFormatter is picky about its length, so drop it.
+/// Made once: building a formatter loads ICU's locale data, which is costly to repeat.
+/// ISO8601DateFormatter is thread-safe.
+nonisolated(unsafe) private let isoFormatter = ISO8601DateFormatter()
+
 func parseISO(_ s: String) -> Date? {
     let trimmed = s.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
-    return ISO8601DateFormatter().date(from: trimmed)
+    return isoFormatter.date(from: trimmed)
 }
 
 // MARK: - Nicknames
