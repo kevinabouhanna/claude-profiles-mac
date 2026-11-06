@@ -57,6 +57,10 @@ enum SettingsWindow {
         w.minSize = NSSize(width: 680, height: 440)
         w.center()
         w.setFrameAutosaveName("SettingsWindow")
+        // Back out of the Dock once Settings closes.
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { _ in
+            MainActor.assumeIsolated { NSApp.setActivationPolicy(.accessory) }
+        }
         window = w
         return w
     }
@@ -66,6 +70,7 @@ enum SettingsWindow {
         let w = make()
         AutoConfig.shared.load()
         Store.shared.refresh()
+        NSApp.setActivationPolicy(.regular)  // a Dock icon while Settings is open
         NSApp.activate()
         w.makeKeyAndOrderFront(nil)
     }
@@ -133,7 +138,7 @@ struct GeneralPane: View {
             }
             Section("About") {
                 LabeledContent("Accounts Managed By", value: store.cswapVersion.isEmpty ? "claude-swap" : store.cswapVersion)
-                LabeledContent("Claude Usage Bar") {
+                LabeledContent("Claude Profiles \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")") {
                     Button("Quit") { NSApp.terminate(nil) }
                 }
             }

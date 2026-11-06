@@ -1,10 +1,10 @@
 #!/bin/zsh
-# Builds "Claude Usage Bar.app" for Apple silicon and Intel.
+# Builds "Claude Profiles.app" for Apple silicon and Intel.
 #
 #   ./build.sh              ad-hoc signed, for running on this Mac
 #   ./build.sh --install    the same, then copied to /Applications and launched
 #   ./build.sh --release    Developer ID signed, notarized, stapled, and packaged as
-#                           build/ClaudeUsageBar.dmg. Needs these environment variables:
+#                           build/ClaudeProfiles.dmg. Needs these environment variables:
 #                             DEVID_P12, DEVID_P12_PASSWORD   the Developer ID Application certificate
 #                             NOTARY_KEY, NOTARY_KEY_ID, NOTARY_ISSUER   an App Store Connect API key
 #                           or SIGN_IDENTITY to use a certificate already in your keychain.
@@ -13,29 +13,31 @@ set -euo pipefail
 cd "${0:A:h}"
 
 MODE="${1:-}"
-APP="build/Claude Usage Bar.app"
+APP="build/Claude Profiles.app"
 VERSION="${MARKETING_VERSION:-1.0}"
 BUILD_NUMBER=$(git rev-list --count HEAD 2>/dev/null || echo 1)
 
-rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" build/obj
+rm -rf "$APP" "build/Claude Usage Bar.app"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" build/obj
+cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 
 for arch in arm64 x86_64; do
   swiftc -O -parse-as-library -swift-version 5 -target "$arch-apple-macos26" \
-    Sources/*.swift -o "build/obj/ClaudeUsageBar-$arch"
+    Sources/*.swift -o "build/obj/ClaudeProfiles-$arch"
 done
-lipo -create build/obj/ClaudeUsageBar-arm64 build/obj/ClaudeUsageBar-x86_64 \
-  -output "$APP/Contents/MacOS/ClaudeUsageBar"
+lipo -create build/obj/ClaudeProfiles-arm64 build/obj/ClaudeProfiles-x86_64 \
+  -output "$APP/Contents/MacOS/ClaudeProfiles"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleIdentifier</key><string>local.claude-usage-bar</string>
-  <key>CFBundleName</key><string>Claude Usage Bar</string>
-  <key>CFBundleDisplayName</key><string>Claude Usage Bar</string>
-  <key>CFBundleExecutable</key><string>ClaudeUsageBar</string>
+  <key>CFBundleIdentifier</key><string>com.kevinabouhanna.ClaudeProfiles</string>
+  <key>CFBundleName</key><string>Claude Profiles</string>
+  <key>CFBundleDisplayName</key><string>Claude Profiles</string>
+  <key>CFBundleExecutable</key><string>ClaudeProfiles</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
@@ -51,10 +53,11 @@ if [[ "$MODE" != "--release" ]]; then
   codesign --force --sign - "$APP"
   echo "Built $APP"
   if [[ "$MODE" == "--install" ]]; then
-    pkill -x ClaudeUsageBar 2>/dev/null || true
-    rm -rf "/Applications/Claude Usage Bar.app"
+    pkill -x ClaudeProfiles 2>/dev/null || true
+    pkill -x ClaudeUsageBar 2>/dev/null || true   # the app's old name
+    rm -rf "/Applications/Claude Profiles.app" "/Applications/Claude Usage Bar.app"
     cp -R "$APP" /Applications/
-    open "/Applications/Claude Usage Bar.app"
+    open "/Applications/Claude Profiles.app"
     echo "Installed and launched"
   fi
   exit 0
@@ -98,17 +101,17 @@ codesign --verify --strict --verbose=2 "$APP"
 
 # The app first, so it's stapled before it's packaged: it then opens without a
 # warning even offline, after being dragged out of the disk image.
-ditto -c -k --keepParent "$APP" build/ClaudeUsageBar.zip
-notarize build/ClaudeUsageBar.zip
+ditto -c -k --keepParent "$APP" build/ClaudeProfiles.zip
+notarize build/ClaudeProfiles.zip
 xcrun stapler staple "$APP"
-rm build/ClaudeUsageBar.zip
+rm build/ClaudeProfiles.zip
 
-DMG=build/ClaudeUsageBar.dmg
+DMG=build/ClaudeProfiles.dmg
 rm -rf build/dmg "$DMG"
 mkdir -p build/dmg
 cp -R "$APP" build/dmg/
 ln -s /Applications build/dmg/Applications
-hdiutil create -volname "Claude Usage Bar" -srcfolder build/dmg -ov -format UDZO "$DMG" >/dev/null
+hdiutil create -volname "Claude Profiles" -srcfolder build/dmg -ov -format UDZO "$DMG" >/dev/null
 rm -rf build/dmg
 codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
 notarize "$DMG"

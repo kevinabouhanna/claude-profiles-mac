@@ -1,6 +1,7 @@
 // App entry point, the menu bar item, and debug modes for rendering and self-testing.
 import AppKit
 import Combine
+import ServiceManagement
 import SwiftUI
 
 @MainActor
@@ -74,7 +75,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
     private func listenForTestCommands() {
         DistributedNotificationCenter.default().addObserver(
             self, selector: #selector(testCommand(_:)),
-            name: Notification.Name("local.claude-usage-bar.test"), object: nil,
+            name: Notification.Name("com.kevinabouhanna.ClaudeProfiles.test"), object: nil,
             suspensionBehavior: .deliverImmediately
         )
     }
@@ -89,7 +90,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
         case "status":
             let frame = item.button?.window?.frame ?? .zero
             let info = "frame=\(frame) image=\(item.button?.image?.size ?? .zero) visible=\(item.isVisible) popover=\(popover.isShown) popoverWindow=\(popover.contentViewController?.view.window?.frame ?? .zero) onScreen=\(popover.contentViewController?.view.window?.isVisible ?? false) clicks=\(clickCount) text=\(item.button?.toolTip ?? "")\n"
-            try? info.write(toFile: NSTemporaryDirectory() + "claude-usage-bar-status.txt", atomically: true, encoding: .utf8)
+            try? info.write(toFile: NSTemporaryDirectory() + "claude-profiles-status.txt", atomically: true, encoding: .utf8)
         default: break
         }
     }
@@ -332,7 +333,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
         let settings = menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Claude Usage Bar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit Claude Profiles", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
         item.button?.performClick(nil)
         item.menu = nil  // keep left-click opening the dropdown
@@ -346,6 +347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var status: StatusController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Migration.fromClaudeUsageBar()  // before anything reads settings
         NSApp.mainMenu = Self.makeMainMenu()
         AutoSwitcher.shared.cleanUpOrphan()
         status = StatusController()
@@ -353,17 +355,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AutoSwitcher.shared.sync()
     }
 
+    /// The Dock icon, there while Settings is open.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        SettingsWindow.show()
+        return false
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         AutoSwitcher.shared.stop()
     }
 
-    /// The menu bar never shows this for a background app, but its key equivalents
-    /// are what make Cmd-V, Cmd-W and friends work in the Settings window.
+    /// Shown while Settings is open and the app is in the Dock. Its key equivalents are
+    /// also what make Cmd-V, Cmd-W and friends work in the Settings window.
     private static func makeMainMenu() -> NSMenu {
         let main = NSMenu()
         let appItem = main.addItem(withTitle: "", action: nil, keyEquivalent: "")
         let app = NSMenu()
-        app.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        app.addItem(withTitle: "About Claude Profiles", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        app.addItem(.separator())
+        let settings = app.addItem(withTitle: "Settings…", action: #selector(AppDelegate.showSettings), keyEquivalent: ",")
+        settings.target = NSApp.delegate
+        app.addItem(.separator())
+        app.addItem(withTitle: "Hide Claude Profiles", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        app.addItem(withTitle: "Quit Claude Profiles", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = app
 
         let editItem = main.addItem(withTitle: "Edit", action: nil, keyEquivalent: "")
@@ -382,6 +396,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         windowItem.submenu = window
         return main
+    }
+
+    @objc func showSettings() { SettingsWindow.show() }
+}
+
+/// This app used to be called Claude Usage Bar, under the bundle ID
+/// `local.claude-usage-bar`. Settings, nicknames and the Auto-Switch PID live under the
+/// bundle ID, so the first launch under the new one copies them across.
+@MainActor
+enum Migration {
+    static let oldDomain = "local.claude-usage-bar"
+
+    static func fromClaudeUsageBar() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: "migratedFromClaudeUsageBar") else { return }
+        defaults.set(true, forKey: "migratedFromClaudeUsageBar")
+        guard let old = defaults.persistentDomain(forName: oldDomain), !old.isEmpty else { return }
+        for (key, value) in old where defaults.object(forKey: key) == nil && !key.hasPrefix("NS") {
+            defaults.set(value, forKey: key)
+        }
+        // The old app was only ever run with Open at Login on, and that login item
+        // belongs to the old bundle, so it's set up again for this one.
+        if SMAppService.mainApp.status != .enabled { try? SMAppService.mainApp.register() }
     }
 }
 

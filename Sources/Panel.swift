@@ -246,7 +246,7 @@ struct PanelView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Text("Claude Usage").font(.system(size: 15, weight: .bold)).foregroundColor(.primary)
+            Text("Claude Profiles").font(.system(size: 15, weight: .bold)).foregroundColor(.primary)
             Spacer()
             Button { store.refresh() } label: {
                 Image(systemName: "arrow.clockwise").foregroundColor(.primary.opacity(store.loading ? 0.3 : 0.75))

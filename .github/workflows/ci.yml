@@ -13,4 +13,4 @@ jobs:
       - name: Build (universal, ad-hoc signed)
         run: ./build.sh
       - name: Check both architectures are in
-        run: lipo -archs "build/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar"
+        run: lipo -archs "build/Claude Profiles.app/Contents/MacOS/ClaudeProfiles"
