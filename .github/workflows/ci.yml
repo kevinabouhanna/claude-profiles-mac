@@ -10,6 +10,8 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - name: Show the toolchain
+        run: swiftc --version && xcrun --show-sdk-version
       - name: Build (universal, ad-hoc signed)
         run: ./build.sh
       - name: Check both architectures are in

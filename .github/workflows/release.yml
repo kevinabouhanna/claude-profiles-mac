@@ -23,6 +23,9 @@ jobs:
       # Signed with the Developer ID and notarized, so the download opens without a
       # Gatekeeper warning. A missing secret fails the build rather than shipping an
       # app that asks for Open Anyway.
+      - name: Show the toolchain
+        run: swiftc --version && xcrun --show-sdk-version
+
       - name: Build, sign, notarize and package
         env:
           MARKETING_VERSION: ${{ steps.version.outputs.value }}

@@ -59,7 +59,7 @@ enum SettingsWindow {
         w.setFrameAutosaveName("SettingsWindow")
         // Back out of the Dock once Settings closes.
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { _ in
-            MainActor.assumeIsolated { NSApp.setActivationPolicy(.accessory) }
+            MainActor.assumeIsolated { _ = NSApp.setActivationPolicy(.accessory) }
         }
         window = w
         return w
