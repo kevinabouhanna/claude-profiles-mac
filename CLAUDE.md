@@ -26,23 +26,39 @@ forever: a CPU core at 100%. These rules exist so nothing like that ships again.
    over 20% throttles redraws, logs a fault under the `com.kevinabouhanna.ClaudeProfiles`
    subsystem, and asks the user to report it.
 
-## Workflow
+## Workflow: issue → pull request → merge → install
 
-Work autonomously. Every request that changes the repo goes through an issue and a pull request,
-merged without asking:
+Nothing changes without all of these, in this order: open an issue, open a pull request that
+closes it, merge it, check the issue is closed, and update the app on this Mac.
 
-1. **Open an issue** describing the request (`gh issue create`).
-2. **Branch from `main`, commit, and open a pull request** whose body says `Closes #<issue>`, so
-   it's linked to the issue and closes it on merge.
-3. **Wait for CI to pass** (`gh pr checks --watch`). If it fails, fix it on the branch.
-4. **Squash-merge it and delete the branch** (`gh pr merge --squash --delete-branch`), then pull
-   `main`. Don't ask first.
+**Don't stop to ask before a routine step.** When something is requested, carry it all the way
+through to the installed app: opening issues and pull requests, merging once CI is green,
+closing issues and installing. Never wait to be told to open an issue or a pull request. Ask
+first only for something high-risk:
+- anything that can't be undone, such as deleting branches others use, rewriting history or
+  force-pushing;
+- a release (pushing a `v*` tag), and changing signing keys, certificates or repository secrets;
+- anything that could lose the person's accounts, credentials, settings or history, or deleting
+  files or data the request didn't ask for;
+- a step that failed in a way you don't understand, or CI that keeps failing after a real
+  attempt to fix it;
+- a request whose intent is genuinely unclear.
 
-Stop and ask only when something is critical: a release (pushing a `v*` tag), anything
-destructive or hard to undo (force-pushing, rewriting history, deleting branches other than the
-merged one, deleting files or data the request didn't ask for), secrets or signing, CI that keeps
-failing after a real attempt to fix it, or a request whose intent is genuinely unclear. Then
-explain what's at stake and ask whether to push.
+Then explain what's at stake and ask.
+
+1. **An issue.** Every change starts from an issue that says what and why (`gh issue create`).
+   If none exists, open one first. Keep its description current: it is the record of what was
+   decided.
+2. **A pull request from a branch, attached to the issue.**
+   - Name the branch after the issue, e.g. `reorder-accounts-12`.
+   - Put `Closes #N` in the PR description, so merging closes the issue.
+   - **Never push to `main` directly.**
+3. **Merge it** once CI is green (`gh pr checks --watch`; fix it on the branch if it fails).
+   Squash-merge and delete the branch (`gh pr merge --squash --delete-branch`), then pull `main`.
+4. **Close the issue.** `Closes #N` does it on merge; check, and close it by hand if it's still
+   open.
+5. **Update the app on this Mac.** `./build.sh --install` from the updated `main`, so the
+   installed app is what was merged.
 
 ## Checking a change
 
