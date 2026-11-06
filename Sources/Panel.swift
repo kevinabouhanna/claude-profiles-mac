@@ -181,8 +181,28 @@ struct AccountPicker: View {
 
 struct AccountRow: View {
     @ObservedObject var store: Store
+    @ObservedObject private var prefs = Prefs.shared
+    @Environment(\.colorScheme) private var scheme
     let account: Account
     var switched: () -> Void = {}
+
+    private static let dim = Color.primary.opacity(0.55)
+
+    /// "18 · 47", each number colored the way the menu bar's Color setting colors it.
+    private var numbers: Text {
+        func number(_ window: Window?, session: Bool) -> Text {
+            guard let window else { return Text("–").foregroundColor(Self.dim) }
+            let color: Color
+            switch prefs.style.colorMode {
+            case .system: color = Self.dim
+            case .usage: color = Palette.tint(window.severity)
+            case .custom: color = Color(nsColor: nsColor(hex: prefs.style.customHex(session: session, dark: scheme == .dark)))
+            }
+            return Text(String(window.display)).foregroundColor(color)
+        }
+        let sep = Text(" · ").foregroundColor(Self.dim)
+        return Text("\(number(account.session, session: true))\(sep)\(number(account.weekly, session: false))")
+    }
 
     var body: some View {
         HStack(spacing: 9) {
@@ -192,9 +212,9 @@ struct AccountRow: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.primary)
                     .lineLimit(1).truncationMode(.middle)
-                Text(account.numbers)
-                    .font(.system(size: 10)).monospacedDigit()
-                    .foregroundColor(.primary.opacity(0.55))
+                numbers
+                    .font(.system(size: 10))
+                    .monospacedDigit()
             }
             Spacer(minLength: 4)
             if account.active == true {

@@ -192,11 +192,5 @@ extension Account {
     var weekly: Window? {
         usage?.sevenDay.map { Window(raw: $0, period: weekPeriod, fetchedAt: fetchedDate) }
     }
-    /// "2 · 46": bare numbers, no name and no unit.
-    var numbers: String {
-        let s = session.map { String($0.display) } ?? "–"
-        let w = weekly.map { String($0.display) } ?? "–"
-        return "\(s) · \(w)"
-    }
 }
 
