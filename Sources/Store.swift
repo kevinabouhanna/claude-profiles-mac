@@ -134,27 +134,63 @@ final class Store: ObservableObject {
 
     /// Runs a cswap action, shows its message if it fails, then reloads.
     func perform(_ args: [String], stdin: String? = nil, failure: String) {
+        performAll([args], stdin: stdin, failure: failure)
+    }
+
+    /// Runs cswap actions one after another, stopping at the first that fails.
+    private func performAll(_ steps: [[String]], stdin: String? = nil, failure: String) {
         guard !busy else { return }
         busy = true
         Task.detached {
-            let result = CLI.run(CLI.cswap, args, stdin: stdin)
-            await MainActor.run {
+            var failed: CLI.Result?
+            for args in steps {
+                let result = CLI.run(CLI.cswap, args, stdin: stdin)
+                if !result.ok { failed = result; break }
+            }
+            await MainActor.run { [failed] in
                 let store = Store.shared
                 store.busy = false
-                if !result.ok { store.report(failure, detail: result.text) }
+                if let failed { store.report(failure, detail: failed.text) }
                 store.refresh()
             }
         }
+    }
+
+    /// Puts the accounts in this order, which is the order Next Account rotates in.
+    func reorder(_ order: [Account]) {
+        guard !busy else { return }
+        let steps = SlotOrder.moves(slots: accounts.map(\.number), order: order.map(\.number))
+        guard !steps.isEmpty else { return }
+        accounts = order  // shows the new order now; the refresh after brings the new numbers
+        performAll(steps.map { ["move", String($0.from), String($0.to)] }, failure: "Couldn't reorder the accounts.")
+    }
+
+    /// A dragged account dropped on another takes its place in the list.
+    func place(_ number: Int, at target: Account) {
+        guard let from = accounts.firstIndex(where: { $0.number == number }),
+              let to = accounts.firstIndex(where: { $0.number == target.number }), from != to else { return }
+        var order = accounts
+        order.insert(order.remove(at: from), at: to)
+        reorder(order)
+    }
+
+    /// Moves an account one place up (-1) or down (+1).
+    func move(_ account: Account, by offset: Int) {
+        guard let i = accounts.firstIndex(where: { $0.number == account.number }),
+              accounts.indices.contains(i + offset) else { return }
+        var order = accounts
+        order.swapAt(i, i + offset)
+        reorder(order)
     }
 
     func switchTo(_ account: Account) {
         perform(["switch", String(account.number)], failure: "Couldn't switch to \(account.displayName).")
     }
 
-    /// nil rotates to the next account; otherwise "best" or "next-available".
-    func switchUsing(strategy: String?) {
-        let args = strategy.map { ["switch", "--strategy", $0] } ?? ["switch"]
-        perform(args, failure: "Couldn't switch accounts.")
+    /// "next-available" rotates in order, skipping accounts at a limit; "best" jumps
+    /// to the one with the most usage left.
+    func switchUsing(strategy: String) {
+        perform(["switch", "--strategy", strategy], failure: "Couldn't switch accounts.")
     }
 
     func setOpenAtLogin(_ on: Bool) {

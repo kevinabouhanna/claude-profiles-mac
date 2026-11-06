@@ -683,6 +683,17 @@ enum Debug {
         check("pointer at the top edge is in the menu bar", MenuBarStrip.contains(CGPoint(x: 500, y: 800), screens: screens))
         check("pointer below the strip is not", !MenuBarStrip.contains(CGPoint(x: 500, y: 769), screens: screens))
         let stack = [(number: 1, layer: 25), (number: 2, layer: 0), (number: 3, layer: 0)]
+        // Account order
+        func reordered(_ slots: [Int], _ order: [Int]) -> [Int] {
+            var at = Dictionary(uniqueKeysWithValues: slots.map { ($0, $0) })  // slot -> account
+            for step in SlotOrder.moves(slots: slots, order: order) {
+                (at[step.from], at[step.to]) = (at[step.to], at[step.from])
+            }
+            return slots.sorted().map { at[$0]! }
+        }
+        check("reorder puts accounts in the dragged order", reordered([1, 2, 3, 4], [3, 1, 4, 2]) == [3, 1, 4, 2])
+        check("reorder keeps sparse slot numbers", reordered([2, 5, 9], [9, 2, 5]) == [9, 2, 5])
+        check("unchanged order moves nothing", SlotOrder.moves(slots: [1, 2, 3], order: [1, 2, 3]).isEmpty)
         check("window in front skips other layers", WindowStack.window(inFrontOf: 3, in: stack) == 2 && WindowStack.window(inFrontOf: 2, in: stack) == nil)
 
         // Secrets

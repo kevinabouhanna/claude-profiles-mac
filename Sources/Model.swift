@@ -49,6 +49,25 @@ struct Account: Decodable, Identifiable {
     var fetchedDate: Date? { usageFetchedAt.flatMap(parseISO) }
 }
 
+/// Account order is cswap's slot numbers: rotation and `cswap list` go by them.
+enum SlotOrder {
+    /// The `cswap move <slot> <target>` steps that put the accounts now in `slots`
+    /// (their numbers, in list order) into `order` (the same numbers, rearranged).
+    /// A move onto an occupied slot swaps the two, so the slots keep their numbers
+    /// and only who sits in them changes.
+    static func moves(slots: [Int], order: [Int]) -> [(from: Int, to: Int)] {
+        let targets = slots.sorted()
+        var occupant = targets  // occupant[k]: whose account now sits in targets[k]
+        var steps: [(from: Int, to: Int)] = []
+        for (k, wanted) in order.enumerated() where k < targets.count {
+            guard let i = occupant.firstIndex(of: wanted), i != k else { continue }
+            steps.append((targets[i], targets[k]))
+            occupant.swapAt(i, k)
+        }
+        return steps
+    }
+}
+
 struct Usage: Decodable {
     let fiveHour: RawWindow?
     let sevenDay: RawWindow?
