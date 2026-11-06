@@ -205,6 +205,7 @@ final class AutoSwitcher: ObservableObject {
     @Published private(set) var running = false
     var extraArgs: [String] = []
     private var process: Process?
+    var pid: Int32? { process?.processIdentifier }
     private var restartWork: DispatchWorkItem?
 
     /// A previous run that crashed can leave its child behind; two engines would fight.

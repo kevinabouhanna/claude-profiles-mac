@@ -640,15 +640,19 @@ enum Debug {
         check("reads config strings", !config.string("autoswitch.strategy", default: "").isEmpty)
 
         // Auto-switch process (dry run: can never switch)
+        // Only its own process counts: the installed app may be running one too, and
+        // its PID record, in the same settings, is put back afterwards.
         let auto = AutoSwitcher.shared
+        let savedPID = UserDefaults.standard.object(forKey: "autoSwitchPID")
         auto.extraArgs = ["--dry-run"]
         auto.start()
         spin(3)
-        check("auto-switch runs", auto.running)
+        let pid = auto.pid ?? 0
+        check("auto-switch runs", auto.running && pid > 0)
         auto.stop()
         spin(1.5)
-        let left = CLI.run("/usr/bin/pgrep", ["-f", "cswap auto"]).text
-        check("auto-switch stops", !auto.running && left.isEmpty)
+        check("auto-switch stops", !auto.running && pid > 0 && kill(pid, 0) != 0)
+        UserDefaults.standard.set(savedPID, forKey: "autoSwitchPID")
 
         print(failures == 0 ? "ALL PASSED" : "\(failures) FAILED")
         return failures == 0 ? 0 : 1
