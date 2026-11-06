@@ -26,39 +26,15 @@ forever: a CPU core at 100%. These rules exist so nothing like that ships again.
    over 20% throttles redraws, logs a fault under the `com.kevinabouhanna.ClaudeProfiles`
    subsystem, and asks the user to report it.
 
-## Workflow: issue → pull request → merge → install
+## Workflow
 
-Nothing changes without all of these, in this order: open an issue, open a pull request that
-closes it, merge it, check the issue is closed, and update the app on this Mac.
+`~/.claude/CLAUDE.md` has the workflow: issue → pull request → merge → install, carried
+through without asking. What's particular to this repo:
 
-**Don't stop to ask before a routine step.** When something is requested, carry it all the way
-through to the installed app: opening issues and pull requests, merging once CI is green,
-closing issues and installing. Never wait to be told to open an issue or a pull request. Ask
-first only for something high-risk:
-- anything that can't be undone, such as deleting branches others use, rewriting history or
-  force-pushing;
-- a release (pushing a `v*` tag), and changing signing keys, certificates or repository secrets;
-- anything that could lose the person's accounts, credentials, settings or history, or deleting
-  files or data the request didn't ask for;
-- a step that failed in a way you don't understand, or CI that keeps failing after a real
-  attempt to fix it;
-- a request whose intent is genuinely unclear.
-
-Then explain what's at stake and ask.
-
-1. **An issue.** Every change starts from an issue that says what and why (`gh issue create`).
-   If none exists, open one first. Keep its description current: it is the record of what was
-   decided.
-2. **A pull request from a branch, attached to the issue.**
-   - Name the branch after the issue, e.g. `reorder-accounts-12`.
-   - Put `Closes #N` in the PR description, so merging closes the issue.
-   - **Never push to `main` directly.**
-3. **Merge it** once CI is green (`gh pr checks --watch`; fix it on the branch if it fails).
-   Squash-merge and delete the branch (`gh pr merge --squash --delete-branch`), then pull `main`.
-4. **Close the issue.** `Closes #N` does it on merge; check, and close it by hand if it's still
-   open.
-5. **Update the app on this Mac.** `./build.sh --install` from the updated `main`, so the
-   installed app is what was merged.
+- **A release (pushing a `v*` tag) needs asking first.** See Releasing below.
+- Branches are named after the issue, e.g. `reorder-accounts-12`.
+- Install with `./build.sh --install` from the updated `main`, so the installed app is what
+  was merged.
 
 ## Checking a change
 
