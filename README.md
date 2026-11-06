@@ -22,11 +22,8 @@
 
 ---
 
-The Mac counterpart of [Claude Profiles for Windows](https://github.com/kevinabouhanna/claude-profiles-windows).
-It sits in the menu bar as two numbers, your 5-hour session usage and your weekly usage, and opens
-into a Liquid Glass dropdown with the detail. It's built on
-[claude-swap](https://github.com/realiti4/claude-swap), which keeps your logins; this app never
-reads or stores a credential itself.
+Claude Profiles sits in the menu bar as two numbers, your 5-hour session usage and your weekly
+usage, and opens into a Liquid Glass dropdown with the detail.
 
 ## Features
 
@@ -84,6 +81,17 @@ top of `build.sh` for what it needs. Releases are cut by pushing a `v*` tag, whi
 | `NOTARY_KEY_BASE64` | An App Store Connect API key (.p8), base64-encoded |
 | `NOTARY_KEY_ID` | That key's ID |
 | `NOTARY_ISSUER` | Its issuer ID |
+
+## Open Source Dependencies
+
+- **[claude-swap](https://github.com/realiti4/claude-swap)** (`cswap`) does the account work. The app
+  runs it to list your accounts and their usage (`cswap list`), switch accounts (`cswap switch`), save
+  logins and include or exclude them from Auto-Switch (`cswap add`, `enable`, `disable`), read and change
+  Auto-Switch settings (`cswap config`), and run Auto-Switch itself (`cswap auto`). claude-swap keeps
+  your logins; this app never reads or stores a credential itself. Install it separately (see
+  [Install](#install)); it isn't bundled.
+
+Everything else is Apple's own frameworks (AppKit, SwiftUI, Combine), with no third-party packages.
 
 ## License
 
