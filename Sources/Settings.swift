@@ -36,6 +36,8 @@ final class SettingsUI: ObservableObject {
     /// The account row a dragged account is over, which it'll take the place of.
     /// Here, not `@State`: plain swiftc can't load SwiftUI's macros.
     @Published var dropTarget: Int?
+    /// The account row under the pointer, which shows its drag handle.
+    @Published var hoveredAccount: Int?
 }
 
 @MainActor
@@ -171,8 +173,12 @@ struct AccountsPane: View {
                 // Drag and drop rather than `.onMove`: a grouped Form on macOS isn't a
                 // table underneath, and ignores it.
                 ForEach(store.accounts) { account in
-                    SettingsAccountRow(store: store, account: account)
+                    SettingsAccountRow(store: store, account: account, reorderable: store.accounts.count > 1,
+                                       showsHandle: ui.hoveredAccount == account.number && !store.busy)
                         .contentShape(Rectangle())
+                        .onHover { inside in
+                            if inside { ui.hoveredAccount = account.number } else if ui.hoveredAccount == account.number { ui.hoveredAccount = nil }
+                        }
                         .draggable(Self.dragPrefix + String(account.number))
                         .dropDestination(for: String.self) { items, _ in
                             guard let dragged = items.first.flatMap(Self.draggedNumber) else { return false }
@@ -220,6 +226,10 @@ struct AccountsPane: View {
 struct SettingsAccountRow: View {
     @ObservedObject var store: Store
     let account: Account
+    /// Room is kept for the handle whenever there's more than one account, so the
+    /// row doesn't shift when it appears.
+    var reorderable = false
+    var showsHandle = false
 
     private var isActive: Bool { account.active == true }
 
@@ -258,6 +268,15 @@ struct SettingsAccountRow: View {
             }
         } label: {
             HStack(spacing: 10) {
+                if reorderable {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 14)
+                        .opacity(showsHandle ? 1 : 0)
+                        .help("Drag to reorder")
+                        .accessibilityHidden(true)
+                }
                 Text(account.initials)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -271,6 +290,7 @@ struct SettingsAccountRow: View {
                     Text(detail).font(.caption).foregroundStyle(.secondary)
                 }
             }
+            .pointerStyle(showsHandle ? .grabIdle : nil)
         }
     }
 
