@@ -251,24 +251,55 @@ final class StatusController: NSObject, NSPopoverDelegate {
         return window.contentView
     }
 
+    /// Activates the app for the dropdown, leaving Settings where it was.
+    ///
+    /// The activation lands a moment after it's asked for, not during the call: on
+    /// macOS 27.2 Settings came forward over the app in front of it just after the
+    /// dropdown opened, though it had already been put back. So Settings stays off
+    /// screen until `appDidBecomeActive` says the activation has happened.
     private func activateForPopover() {
-        if !NSApp.isActive { activatingForPopover = true }
-        keepingSettingsInPlace { NSApp.activate(ignoringOtherApps: true) }
+        guard !NSApp.isActive else { return }
+        activatingForPopover = true
+        parkSettings()
+        NSApp.activate(ignoringOtherApps: true)
+        // macOS can turn the activation down, and then nothing else would bring
+        // Settings back.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self, self.activatingForPopover else { return }
+            self.activatingForPopover = false
+            self.unparkSettings()
+        }
     }
 
+    /// Settings while it's off screen, with the window that was in front of it.
+    private var parkedSettings: (window: NSWindow, inFront: Int)?
+
     /// Runs `change` without letting it bring Settings forward from behind another
-    /// app's window: activating the app, or the dropdown closing while it's active,
-    /// would. Off screen for that moment, it's left alone, then goes straight back
-    /// below the window that was in front of it.
+    /// app's window. The dropdown closing while the app is active makes Settings
+    /// key, which would.
     private func keepingSettingsInPlace(_ change: () -> Void) {
-        guard let window = SettingsWindow.visibleWindow, window.attachedSheet == nil,
-              let inFront = WindowStack.window(inFrontOf: window.windowNumber) else {
-            change()
-            return
-        }
-        window.orderOut(nil)
+        parkSettings()
         change()
-        window.order(.below, relativeTo: inFront)
+        unparkSettings()
+    }
+
+    /// Takes Settings off screen if another window covers it. Activating the app
+    /// brings its main window forward; off screen at that moment, it's left alone.
+    private func parkSettings() {
+        guard parkedSettings == nil, let window = SettingsWindow.visibleWindow,
+              window.attachedSheet == nil,
+              let inFront = WindowStack.window(inFrontOf: window.windowNumber) else { return }
+        window.orderOut(nil)
+        parkedSettings = (window, inFront)
+    }
+
+    /// Puts Settings back below the window that was in front of it, unless it was
+    /// shown in the meantime, by the dropdown's gear.
+    private func unparkSettings() {
+        guard let parked = parkedSettings else { return }
+        parkedSettings = nil
+        guard !parked.window.isVisible else { return }
+        parked.window.order(.below, relativeTo: parked.inFront)
     }
 
     /// `returningFocus` is for a dismissal: Esc, or the status item clicked again. If
@@ -358,6 +389,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
     @objc private func appDidBecomeActive() {
         guard !activatingForPopover else {
             activatingForPopover = false
+            unparkSettings()
             return
         }
         guard let window = SettingsWindow.visibleWindow, NSApp.modalWindow == nil else { return }
