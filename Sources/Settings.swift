@@ -137,7 +137,6 @@ struct GeneralPane: View {
                 }
             }
             Section("About") {
-                LabeledContent("Accounts Managed By", value: store.cswapVersion.isEmpty ? "claude-swap" : store.cswapVersion)
                 LabeledContent("Claude Profiles \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")") {
                     Button("Quit") { NSApp.terminate(nil) }
                 }
@@ -588,13 +587,15 @@ struct MenuBarPane: View {
                     ForEach(TitleLayout.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                Picker("Separator", selection: $prefs.style.separator) {
-                    Text("Dot  ·").tag("·")
-                    Text("Bar  |").tag("|")
-                    Text("Slash  /").tag("/")
-                    Text("Space").tag("")
+                if prefs.style.layout != .stacked {
+                    Picker("Separator", selection: $prefs.style.separator) {
+                        Text("Dot  ·").tag("·")
+                        Text("Bar  |").tag("|")
+                        Text("Slash  /").tag("/")
+                        Text("Space").tag("")
+                    }
+                    .disabled(prefs.style.content != .both)
                 }
-                .disabled(prefs.style.content != .both || prefs.style.layout == .stacked)
                 Toggle("Show Weekly First", isOn: $prefs.style.weeklyFirst)
                     .disabled(prefs.style.content != .both)
                 Toggle("Show 5h and 7d Labels", isOn: $prefs.style.showLabels)
