@@ -1,0 +1,16 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (universal, ad-hoc signed)
+        run: ./build.sh
+      - name: Check both architectures are in
+        run: lipo -archs "build/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar"

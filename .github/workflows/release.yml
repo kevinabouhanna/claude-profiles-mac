@@ -1,0 +1,57 @@
+name: Release
+
+# Cut a release by tagging:  git tag v1.1.0 && git push origin v1.1.0
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # to create the release and upload the disk image
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # build.sh numbers builds by commit count
+
+      - name: Derive the version from the tag
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # Signed with the Developer ID and notarized, so the download opens without a
+      # Gatekeeper warning. A missing secret fails the build rather than shipping an
+      # app that asks for Open Anyway.
+      - name: Build, sign, notarize and package
+        env:
+          MARKETING_VERSION: ${{ steps.version.outputs.value }}
+          DEVID_P12_BASE64: ${{ secrets.DEVID_P12_BASE64 }}
+          DEVID_P12_PASSWORD: ${{ secrets.DEVID_P12_PASSWORD }}
+          NOTARY_KEY_BASE64: ${{ secrets.NOTARY_KEY_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
+        run: |
+          for name in DEVID_P12_BASE64 DEVID_P12_PASSWORD NOTARY_KEY_BASE64 NOTARY_KEY_ID NOTARY_ISSUER; do
+            test -n "${!name}" || { echo "$name is not set" >&2; exit 1; }
+          done
+          export DEVID_P12="$RUNNER_TEMP/developer-id.p12" NOTARY_KEY="$RUNNER_TEMP/notary.p8"
+          echo "$DEVID_P12_BASE64" | base64 --decode > "$DEVID_P12"
+          echo "$NOTARY_KEY_BASE64" | base64 --decode > "$NOTARY_KEY"
+          ./build.sh --release
+          rm -f "$DEVID_P12" "$NOTARY_KEY"
+
+      - name: Verify the signature, notarization and version
+        run: |
+          app="build/Claude Usage Bar.app"
+          codesign -dvv "$app" 2>&1 | tee /dev/stderr | grep -q 'TeamIdentifier=GRQKG7M8CL'
+          spctl -a -vv "$app" 2>&1 | tee /dev/stderr | grep -q 'source=Notarized Developer ID'
+          xcrun stapler validate "$app"
+          xcrun stapler validate build/ClaudeUsageBar.dmg
+          lipo -archs "$app/Contents/MacOS/ClaudeUsageBar" | grep -q 'x86_64 arm64\|arm64 x86_64'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "${{ steps.version.outputs.value }}"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" build/ClaudeUsageBar.dmg --title "$GITHUB_REF_NAME" --generate-notes
