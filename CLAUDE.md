@@ -26,6 +26,24 @@ forever: a CPU core at 100%. These rules exist so nothing like that ships again.
    over 20% throttles redraws, logs a fault under the `com.kevinabouhanna.ClaudeProfiles`
    subsystem, and asks the user to report it.
 
+## Workflow
+
+Work autonomously. Every request that changes the repo goes through an issue and a pull request,
+merged without asking:
+
+1. **Open an issue** describing the request (`gh issue create`).
+2. **Branch from `main`, commit, and open a pull request** whose body says `Closes #<issue>`, so
+   it's linked to the issue and closes it on merge.
+3. **Wait for CI to pass** (`gh pr checks --watch`). If it fails, fix it on the branch.
+4. **Squash-merge it and delete the branch** (`gh pr merge --squash --delete-branch`), then pull
+   `main`. Don't ask first.
+
+Stop and ask only when something is critical: a release (pushing a `v*` tag), anything
+destructive or hard to undo (force-pushing, rewriting history, deleting branches other than the
+merged one, deleting files or data the request didn't ask for), secrets or signing, CI that keeps
+failing after a real attempt to fix it, or a request whose intent is genuinely unclear. Then
+explain what's at stake and ask whether to push.
+
 ## Checking a change
 
 - `./build.sh --install` builds and installs it.
