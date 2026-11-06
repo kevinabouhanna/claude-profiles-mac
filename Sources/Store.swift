@@ -70,7 +70,6 @@ final class Store: ObservableObject {
     @Published var busy = false
     @Published var openAtLogin = SMAppService.mainApp.status == .enabled
     @Published var lastUpdated: Date?
-    @Published var cswapVersion = ""
 
     private var timer: Timer?
     private(set) var refreshCount = 0
@@ -85,10 +84,6 @@ final class Store: ObservableObject {
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { _ in
             Task { @MainActor in Store.shared.refresh() }
-        }
-        Task.detached {
-            let v = CLI.run(CLI.cswap, ["--version"]).text
-            await MainActor.run { Store.shared.cswapVersion = v }
         }
     }
 
