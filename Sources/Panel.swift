@@ -296,8 +296,12 @@ struct PanelView: View {
                 window: Window(raw: raw, period: weekPeriod, fetchedAt: account.fetchedDate)
             )
         }
-        if account.session == nil && account.weekly == nil {
-            Text("No usage available: \(account.usageStatus ?? "unknown").")
+        if account.carriedOver {
+            let age = account.fetchedDate.map { ageText(since: $0) } ?? "earlier"
+            Text("Last reading, from \(age). \(account.statusMessage ?? "")")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+        } else if account.session == nil && account.weekly == nil {
+            Text(account.statusMessage ?? "No usage available yet.")
                 .font(.system(size: 12)).foregroundColor(Palette.orange)
         }
     }

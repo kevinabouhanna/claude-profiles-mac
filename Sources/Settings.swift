@@ -298,8 +298,9 @@ struct SettingsAccountRow: View {
         var parts: [String] = []
         if account.usage != nil {
             parts.append("Session \(account.session?.display ?? 0)%, Weekly \(account.weekly?.display ?? 0)%")
-        } else if let status = account.usageStatus {
-            parts.append(status.replacingOccurrences(of: "_", with: " ").capitalized)
+        }
+        if let status = account.statusShort {
+            parts.append(status)
         }
         if account.disabled == true { parts.append("Excluded from Auto-Switch") }
         return parts.joined(separator: " · ")

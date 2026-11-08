@@ -74,6 +74,8 @@ final class Store: ObservableObject {
     private var timer: Timer?
     private(set) var refreshCount = 0
     private var lastActive: Int?
+    /// Each account's last good reading, by `nicknameKey`, to carry over a passing outage.
+    private var lastGood: [String: (usage: Usage, fetchedAt: String?)] = [:]
 
     var activeAccount: Account? { accounts.first { $0.active == true } }
 
@@ -99,7 +101,7 @@ final class Store: ObservableObject {
 
     func load(_ data: Data) -> Bool {
         guard let parsed = try? JSONDecoder().decode(ListOutput.self, from: data) else { return false }
-        accounts = parsed.accounts
+        accounts = parsed.accounts.map { carryOver($0) }
         lastUpdated = Date()
         let active = activeAccount
         if let previous = lastActive, let active, active.number != previous, Prefs.shared.notifyOnSwitch {
@@ -110,6 +112,26 @@ final class Store: ObservableObject {
         }
         lastActive = active?.number
         return true
+    }
+
+    /// Keeps the last good reading while cswap reports a passing problem, so a sign-in
+    /// token being renewed doesn't blank the numbers. Marked so the dropdown says how old it is.
+    func carryOver(_ account: Account, now: Date = Date()) -> Account {
+        let key = account.nicknameKey
+        if let usage = account.usage {
+            lastGood[key] = (usage, account.usageFetchedAt)
+            return account
+        }
+        guard let status = account.usageStatus, passingUsageStatuses.contains(status),
+              let good = lastGood[key],
+              let fetched = good.fetchedAt.flatMap(parseISO),
+              now.timeIntervalSince(fetched) < carryOverLimit
+        else { return account }
+        var carried = account
+        carried.usage = good.usage
+        carried.usageFetchedAt = good.fetchedAt
+        carried.carriedOver = true
+        return carried
     }
 
     func refresh() {
