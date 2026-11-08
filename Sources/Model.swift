@@ -15,8 +15,11 @@ struct Account: Decodable, Identifiable {
     let disabled: Bool?
     let active: Bool?
     let usageStatus: String?
-    let usage: Usage?
-    let usageFetchedAt: String?
+    var usage: Usage?
+    var usageFetchedAt: String?
+    /// True when `usage` is the last good reading carried over by `Store`, because
+    /// cswap couldn't read a fresh one (usually a sign-in token being renewed).
+    var carriedOver = false
     var id: Int { number }
 
     enum CodingKeys: String, CodingKey {
@@ -47,6 +50,58 @@ struct Account: Decodable, Identifiable {
         return (words.count > 1 && nickname != nil ? words.map { String($0.prefix(1)) }.joined() : String(displayName.prefix(2))).uppercased()
     }
     var fetchedDate: Date? { usageFetchedAt.flatMap(parseISO) }
+
+    /// cswap's `usageStatus` in plain words, for the dropdown. Nil when usage is fine.
+    var statusMessage: String? {
+        switch usageStatus {
+        case nil, "ok": return nil
+        case "token_expired":
+            return "Claude's sign-in token is renewed every few hours and is being renewed now. This clears on its own."
+        case "relogin_required":
+            return "This account needs to sign in again: run claude in Terminal, then /login."
+        case "keychain_unavailable":
+            return "Can't read the Keychain right now. This clears once the Mac is unlocked."
+        case "foreign_credential":
+            return "Claude Code is signed in to a different account than this one. Switching accounts fixes it."
+        case "no_credentials":
+            return "No saved sign-in for this account."
+        case "api_key":
+            return "API key account: there's no plan usage to show."
+        case "unavailable":
+            return "Couldn't reach Claude to read usage. Trying again on the next refresh."
+        case let other?:
+            return other.replacingOccurrences(of: "_", with: " ").capitalized + "."
+        }
+    }
+
+    /// The same, in a few words, for the account list in Settings.
+    var statusShort: String? {
+        switch usageStatus {
+        case nil, "ok": return nil
+        case "token_expired": return "Renewing sign-in"
+        case "relogin_required": return "Needs to sign in again"
+        case "keychain_unavailable": return "Keychain locked"
+        case "foreign_credential": return "Signed in as another account"
+        case "no_credentials": return "No saved sign-in"
+        case "api_key": return "API key account"
+        case "unavailable": return "Usage unavailable"
+        case let other?: return other.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+}
+
+/// Statuses that mean "try again later", not "something's wrong with this account":
+/// for these, `Store` keeps showing the last good reading.
+let passingUsageStatuses: Set<String> = ["token_expired", "unavailable", "keychain_unavailable"]
+/// How old a carried-over reading may get before it's dropped.
+let carryOverLimit: TimeInterval = 6 * 3600
+
+/// "just now", "12 min ago", "3 h ago".
+func ageText(since date: Date, now: Date = Date()) -> String {
+    let minutes = Int(now.timeIntervalSince(date) / 60)
+    if minutes < 1 { return "just now" }
+    if minutes < 60 { return "\(minutes) min ago" }
+    return "\(minutes / 60) h ago"
 }
 
 /// Account order is cswap's slot numbers: rotation and `cswap list` go by them.

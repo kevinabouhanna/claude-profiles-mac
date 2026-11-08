@@ -702,6 +702,25 @@ enum Debug {
         let week = Window(raw: raw(50, resetIn: -60), period: weekPeriod, fetchedAt: now, now: now)
         check("passed weekly window rolls forward", week.pct == 0 && (week.resetsAt ?? now) > now)
 
+        // A passing token expiry keeps the last reading
+        func row(_ json: String) -> Account? { try? JSONDecoder().decode(Account.self, from: Data(json.utf8)) }
+        let fetched = ISO8601DateFormatter().string(from: now.addingTimeInterval(-600))
+        let store = Store()
+        let good = row(#"{"number":9,"email":"t@example.com","usageStatus":"ok","usage":{"fiveHour":{"pct":42}},"usageFetchedAt":"\#(fetched)"}"#)
+        let expired = row(#"{"number":9,"email":"t@example.com","usageStatus":"token_expired"}"#)
+        let relogin = row(#"{"number":9,"email":"t@example.com","usageStatus":"relogin_required"}"#)
+        if let good, let expired, let relogin {
+            _ = store.carryOver(good, now: now)
+            let carried = store.carryOver(expired, now: now)
+            check("expired token keeps the last reading", carried.carriedOver && carried.session?.display == 42)
+            check("expired token explains itself", carried.statusMessage?.contains("clears on its own") == true)
+            check("relogin is not carried over", !store.carryOver(relogin, now: now).carriedOver)
+            check("old readings are dropped", !store.carryOver(expired, now: now.addingTimeInterval(carryOverLimit)).carriedOver)
+        } else {
+            check("usage fixtures decode", false)
+        }
+        check("age text", ageText(since: now.addingTimeInterval(-720), now: now) == "12 min ago")
+
         // History parsing
         let log = "2026-06-27 02:06:11,123 - claude-swap - INFO - Switched from account 3 to 1\nnoise\n2026-06-28 09:00:00,000 - x - INFO - Switched from account 1 to 2"
         let events = SwitchLog.parse(log)
