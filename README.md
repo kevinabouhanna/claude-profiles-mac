@@ -29,7 +29,7 @@ usage, and opens into a Liquid Glass dropdown with the detail.
 
 | | |
 |---|---|
-| 📊 **Usage at a glance** | Session and weekly percentages in the menu bar, with any per-model weekly limits in the dropdown. |
+| 📊 **Usage at a glance** | Session and weekly percentages in the menu bar, with pace and reset times in the dropdown for any account, not only the one in use. Per-model limits (Fable's is hidden by default) can be shown in Settings → General. |
 | 📏 **Know your pace** | A marker on each bar shows where even usage would put you, and a forecast says whether you'll run out before the reset. |
 | 🔁 **One-click switching** | Open the account list in the dropdown and click Switch. |
 | 🏷️ **Name your accounts** | Call them Work, Personal or anything else, spaces included, instead of reading email addresses. |
@@ -48,7 +48,7 @@ It needs macOS 26 or later, on Apple silicon or Intel.
 
 ## Using it
 
-- **Left-click** the numbers for the dropdown. Click the active account to see the others and switch.
+- **Left-click** the numbers for the dropdown. Click the active account to see the others; click one of them to see its usage and pace without switching, or click Switch.
 - **Right-click** for Settings and Quit.
 - **Rename an account:** Settings → Accounts → ••• → Rename…
 - The dropdown closes when you click anywhere else, including another menu bar item, press Esc, or switch apps.

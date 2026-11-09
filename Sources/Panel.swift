@@ -108,15 +108,52 @@ struct Avatar: View {
     }
 }
 
-/// Whether the account list is open. Not `@State`: this builds with plain swiftc,
-/// which can't load SwiftUI's macros. Shared, so the dropdown can close it.
+/// Whether the account list is open, and which account's usage the cards show.
+/// Not `@State`: this builds with plain swiftc, which can't load SwiftUI's macros.
+/// Shared, so the dropdown can reset it when it closes.
 @MainActor
 final class AccountPickerState: ObservableObject {
     static let shared = AccountPickerState()
     @Published var open = false
+    /// The account picked in the list to look at, by number. Nil means the active one.
+    @Published var viewing: Int?
+
+    /// Back to the active account with the list closed, for the next time the dropdown opens.
+    func reset() {
+        if open { open = false }
+        if viewing != nil { viewing = nil }
+    }
+
+    /// The account the cards show: the one picked, or the active one if none was
+    /// picked or it has gone from the list.
+    static func viewed(in accounts: [Account], viewing: Int?) -> Account? {
+        accounts.first { $0.number == viewing } ?? accounts.first { $0.active == true }
+    }
 }
 
-/// The active account, which opens into every account with a Switch button.
+/// "Switch", as in the account list.
+struct SwitchButton: View {
+    @ObservedObject var store: Store
+    let account: Account
+    var switched: () -> Void = {}
+
+    var body: some View {
+        Button("Switch") {
+            store.switchTo(account)
+            switched()
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundColor(.primary)
+        .padding(.horizontal, 9).padding(.vertical, 4)
+        .background(Capsule().fill(Color.primary.opacity(0.14)))
+        .disabled(store.busy)
+        .help("Switch Claude Code to \(account.displayName)")
+    }
+}
+
+/// The account the cards show (the active one unless you picked another), which
+/// opens into every account. Picking one there shows its usage without switching.
 struct AccountPicker: View {
     @ObservedObject var store: Store
     @ObservedObject private var state = AccountPickerState.shared
@@ -126,35 +163,55 @@ struct AccountPicker: View {
     }
 
     private var canOpen: Bool { store.accounts.count > 1 }
+    private var viewed: Account? { AccountPickerState.viewed(in: store.accounts, viewing: state.viewing) }
+
+    private func toggle() {
+        if canOpen { withAnimation(.easeInOut(duration: 0.15)) { open.toggle() } }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button { if canOpen { withAnimation(.easeInOut(duration: 0.15)) { open.toggle() } } } label: {
-                HStack(spacing: 9) {
-                    if let active = store.activeAccount {
-                        Avatar(account: active)
-                        names(active)
-                    } else {
-                        Text("Choose an account").font(.system(size: 12, weight: .medium)).foregroundColor(.primary)
-                    }
-                    Spacer(minLength: 4)
-                    if canOpen {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.primary.opacity(0.6))
-                            .rotationEffect(.degrees(open ? 180 : 0))
-                    }
+            // A tap rather than a Button: the Switch button sits inside it.
+            HStack(spacing: 9) {
+                if let viewed {
+                    Avatar(account: viewed)
+                    names(viewed)
+                } else {
+                    Text("Choose an account").font(.system(size: 12, weight: .medium)).foregroundColor(.primary)
                 }
-                .padding(.horizontal, 8).padding(.vertical, 6)
-                .contentShape(Rectangle())
+                Spacer(minLength: 4)
+                if let viewed, viewed.active != true {
+                    SwitchButton(store: store, account: viewed) { state.reset() }
+                }
+                if canOpen {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.primary.opacity(0.6))
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                }
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: toggle)
+            .accessibilityElement(children: .contain)
+            .accessibilityAction(named: open ? "Hide accounts" : "Show all accounts", toggle)
             .help(canOpen ? (open ? "Hide accounts" : "Show all accounts") : "")
 
             if open {
                 Divider().padding(.horizontal, 8)
                 VStack(spacing: 2) {
-                    ForEach(store.accounts) { AccountRow(store: store, account: $0) { open = false } }
+                    ForEach(store.accounts) { account in
+                        AccountRow(
+                            store: store, account: account, viewed: account.number == viewed?.number,
+                            select: {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    state.viewing = account.active == true ? nil : account.number
+                                    open = false
+                                }
+                            },
+                            switched: { state.reset() }
+                        )
+                    }
                 }
                 .padding(.vertical, 4)
             }
@@ -171,7 +228,11 @@ struct AccountPicker: View {
             Text(account.displayName)
                 .font(.system(size: 12, weight: .medium)).foregroundColor(.primary)
                 .lineLimit(1).truncationMode(.middle)
-            if let email = account.secondaryName {
+            if account.active != true {
+                Text("Not in use · showing its usage")
+                    .font(.system(size: 10)).foregroundColor(.primary.opacity(0.5))
+                    .lineLimit(1)
+            } else if let email = account.secondaryName {
                 Text(email).font(.system(size: 10)).foregroundColor(.primary.opacity(0.5))
                     .lineLimit(1).truncationMode(.middle)
             }
@@ -184,6 +245,10 @@ struct AccountRow: View {
     @ObservedObject private var prefs = Prefs.shared
     @Environment(\.colorScheme) private var scheme
     let account: Account
+    /// Whether the cards below show this account.
+    var viewed = false
+    /// Shows this account's usage in the cards.
+    var select: () -> Void = {}
     var switched: () -> Void = {}
 
     private static let dim = Color.primary.opacity(0.55)
@@ -224,25 +289,23 @@ struct AccountRow: View {
                     .padding(.horizontal, 7).padding(.vertical, 3)
                     .background(Capsule().fill(Palette.green.opacity(0.16)))
             } else {
-                Button("Switch") {
-                    store.switchTo(account)
-                    switched()
-                }
-                .buttonStyle(.plain)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.primary)
-                .padding(.horizontal, 9).padding(.vertical, 4)
-                .background(Capsule().fill(Color.primary.opacity(0.14)))
-                .disabled(store.busy)
+                SwitchButton(store: store, account: account, switched: switched)
             }
         }
         .padding(.horizontal, 8).padding(.vertical, 4)
-        .help(account.email ?? account.displayName)
+        .background(RoundedRectangle(cornerRadius: 7).fill(viewed ? Color.primary.opacity(0.08) : .clear))
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: select)
+        .accessibilityElement(children: .contain)
+        .accessibilityAction(named: "Show usage", select)
+        .help("\(account.email ?? account.displayName): 5-hour · weekly usage. Click to see its pace.")
     }
 }
 
 struct PanelView: View {
     @ObservedObject var store: Store
+    @ObservedObject private var picker = AccountPickerState.shared
     var openSettings: () -> Void = {}
 
     var body: some View {
@@ -253,8 +316,8 @@ struct PanelView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !store.accounts.isEmpty { AccountPicker(store: store) }
-            if let active = store.activeAccount {
-                cards(for: active)
+            if let viewed = AccountPickerState.viewed(in: store.accounts, viewing: picker.viewing) {
+                cards(for: viewed)
             } else if store.problem == nil {
                 Text(store.accounts.isEmpty ? "No accounts yet. Add one in Settings." : "No active account.")
                     .font(.system(size: 12)).foregroundColor(.primary.opacity(0.6))
@@ -289,7 +352,7 @@ struct PanelView: View {
         if let weekly = account.weekly {
             UsageCard(title: "All models", badge: "Weekly", window: weekly)
         }
-        ForEach(Array((account.usage?.scoped ?? []).enumerated()), id: \.offset) { _, raw in
+        ForEach(Array(ModelLimits.visible(account).enumerated()), id: \.offset) { _, raw in
             UsageCard(
                 title: raw.name ?? "Model",
                 badge: "Weekly",

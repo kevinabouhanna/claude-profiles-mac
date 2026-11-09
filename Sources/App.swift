@@ -146,6 +146,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
         let key = [
             MenuBarImage.plainText(account, style), "\(style)", "\(dark)",
             "\(account?.session?.severity as Any)", "\(account?.weekly?.severity as Any)",
+            ModelLimits.hidden.sorted().joined(separator: ","),
         ].joined(separator: "|")
         guard key != drawnKey else {
             skippedRedraws += 1
@@ -332,7 +333,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
         outsideClickMonitor = nil
         stopWatchingMenuBar()
         anchorWindow?.orderOut(nil)
-        AccountPickerState.shared.open = false  // opens on the active account next time
+        AccountPickerState.shared.reset()  // opens on the active account next time
     }
 
     // MARK: Auto-hidden menu bar
@@ -541,9 +542,10 @@ enum Debug {
         switch args[0] {
         case "--snapshot-settings" where args.count == 3: return snapshotSettings(json: args[1], dir: args[2])
         case "--snapshot-titles" where args.count == 3: return snapshotTitles(json: args[1], dir: args[2])
+        case "--snapshot-panel" where args.count == 3: return snapshotPanel(json: args[1], dir: args[2])
         case "--selftest" where args.count == 2: return selftest(json: args[1])
         default:
-            print("usage: --snapshot-settings <list.json> <dir> | --snapshot-titles <list.json> <dir> | --selftest <list.json>")
+            print("usage: --snapshot-settings <list.json> <dir> | --snapshot-titles <list.json> <dir> | --snapshot-panel <list.json> <dir> | --selftest <list.json>")
             return 2
         }
     }
@@ -619,6 +621,36 @@ enum Debug {
         }
         walk(root)
         print("toolbar: \(root.window?.toolbar != nil), title: \(root.window?.title ?? "")")
+    }
+
+    /// The dropdown on the active account, with the list open, and on each other account.
+    private static func snapshotPanel(json: String, dir: String) -> Int32 {
+        guard loadFixture(json) else { return 1 }
+        let state = AccountPickerState.shared
+        var shots: [(String, () -> Void)] = [
+            ("active", { state.reset() }),
+            ("list", { state.reset(); state.open = true }),
+        ]
+        for account in Store.shared.accounts where account.active != true {
+            shots.append(("account-\(account.number)", { state.reset(); state.viewing = account.number }))
+            shots.append(("account-\(account.number)-list", { state.viewing = account.number; state.open = true }))
+        }
+        for dark in [false, true] {
+            for (name, apply) in shots {
+                apply()
+                let host = NSHostingView(rootView: PanelView(store: Store.shared).background(Color(nsColor: .windowBackgroundColor)))
+                host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                let holder = NSWindow(contentRect: NSRect(x: -6000, y: -6000, width: 320, height: 600), styleMask: .borderless, backing: .buffered, defer: false)
+                holder.contentView = host
+                holder.setContentSize(host.fittingSize)
+                holder.orderFrontRegardless()
+                spin(0.4)
+                capture(host, to: "\(dir)/panel-\(name)-\(dark ? "dark" : "light").png")
+                holder.orderOut(nil)
+            }
+        }
+        state.reset()
+        return 0
     }
 
     private static func snapshotTitles(json: String, dir: String) -> Int32 {
@@ -720,6 +752,23 @@ enum Debug {
             check("usage fixtures decode", false)
         }
         check("age text", ageText(since: now.addingTimeInterval(-720), now: now) == "12 min ago")
+
+        // Looking at another account
+        let two = [row(#"{"number":1,"active":true}"#), row(#"{"number":2,"active":false}"#)].compactMap { $0 }
+        check("cards show the active account by default", AccountPickerState.viewed(in: two, viewing: nil)?.number == 1)
+        check("cards show the account picked", AccountPickerState.viewed(in: two, viewing: 2)?.number == 2)
+        check("a picked account that's gone falls back", AccountPickerState.viewed(in: two, viewing: 9)?.number == 1)
+
+        // Per-model limits
+        let fable = row(#"{"number":3,"usage":{"scoped":[{"pct":40,"name":"Fable"},{"pct":10,"name":"Other"}]}}"#)
+        if let fable {
+            check("Fable is hidden by default", ModelLimits.hiddenByDefault.contains("Fable"))
+            check("hidden limits are left out", ModelLimits.visible(fable, hiding: ["Fable"]).map(\.name) == ["Other"])
+            check("shown limits stay", ModelLimits.visible(fable, hiding: []).count == 2)
+            check("known models include hidden ones", ModelLimits.known(in: [fable]).contains("Fable"))
+        } else {
+            check("model limit fixture decodes", false)
+        }
 
         // History parsing
         let log = "2026-06-27 02:06:11,123 - claude-swap - INFO - Switched from account 3 to 1\nnoise\n2026-06-28 09:00:00,000 - x - INFO - Switched from account 1 to 2"

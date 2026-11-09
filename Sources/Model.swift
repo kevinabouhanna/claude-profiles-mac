@@ -168,6 +168,44 @@ enum Nicknames {
     }
 }
 
+// MARK: - Per-model limits
+
+/// Per-model weekly limits (cswap's `scoped`, such as Fable's) you've chosen to hide
+/// from the dropdown and the menu bar. Stored as the hidden names, so "never set"
+/// (Fable hidden) differs from an empty list (everything shown).
+enum ModelLimits {
+    private static let key = "hiddenModelLimits"
+    static let hiddenByDefault = ["Fable"]
+
+    static var hidden: Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: key) ?? hiddenByDefault)
+    }
+
+    static func isHidden(_ name: String?, in hidden: Set<String> = hidden) -> Bool {
+        hidden.contains(name ?? "")
+    }
+
+    /// The limits to show for an account, in cswap's order.
+    static func visible(_ account: Account, hiding hidden: Set<String> = hidden) -> [RawWindow] {
+        (account.usage?.scoped ?? []).filter { !isHidden($0.name, in: hidden) }
+    }
+
+    /// Every model name worth a toggle: what cswap reports now, plus anything hidden.
+    static func known(in accounts: [Account]) -> [String] {
+        let reported = accounts.flatMap { $0.usage?.scoped ?? [] }.compactMap(\.name)
+        return Array(Set(reported).union(hidden).union(hiddenByDefault)).sorted()
+    }
+
+    @MainActor
+    static func set(_ name: String, shown: Bool) {
+        var all = hidden
+        if shown { all.remove(name) } else { all.insert(name) }
+        UserDefaults.standard.set(all.sorted(), forKey: key)
+        Store.shared.objectWillChange.send()
+        Prefs.shared.onStyleChange?()  // the menu bar can show them
+    }
+}
+
 // MARK: - Pace
 
 let fiveHourPeriod: TimeInterval = 5 * 3600
