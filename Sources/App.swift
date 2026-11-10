@@ -623,17 +623,20 @@ enum Debug {
         print("toolbar: \(root.window?.toolbar != nil), title: \(root.window?.title ?? "")")
     }
 
-    /// The dropdown on the active account, with the list open, and on each other account.
+    /// The dropdown on the active account, on each other account, just after a switch
+    /// and during one. Draws only: nothing is switched.
     private static func snapshotPanel(json: String, dir: String) -> Int32 {
         guard loadFixture(json) else { return 1 }
         let state = AccountPickerState.shared
+        let store = Store.shared
+        func plain() { state.reset(); store.switchedAt = nil; store.switching = nil }
         var shots: [(String, () -> Void)] = [
-            ("active", { state.reset() }),
-            ("list", { state.reset(); state.open = true }),
+            ("active", plain),
+            ("switched", { plain(); store.switchedAt = Date().addingTimeInterval(1) }),
+            ("switching", { plain(); store.switching = "Switching to \(store.accounts.last?.displayName ?? "")…" }),
         ]
-        for account in Store.shared.accounts where account.active != true {
-            shots.append(("account-\(account.number)", { state.reset(); state.viewing = account.number }))
-            shots.append(("account-\(account.number)-list", { state.viewing = account.number; state.open = true }))
+        for account in store.accounts where account.active != true {
+            shots.append(("account-\(account.number)", { plain(); state.viewing = account.number }))
         }
         for dark in [false, true] {
             for (name, apply) in shots {
@@ -649,7 +652,7 @@ enum Debug {
                 holder.orderOut(nil)
             }
         }
-        state.reset()
+        plain()
         return 0
     }
 
@@ -758,6 +761,15 @@ enum Debug {
         check("cards show the active account by default", AccountPickerState.viewed(in: two, viewing: nil)?.number == 1)
         check("cards show the account picked", AccountPickerState.viewed(in: two, viewing: 2)?.number == 2)
         check("a picked account that's gone falls back", AccountPickerState.viewed(in: two, viewing: 9)?.number == 1)
+
+        // Account tabs
+        let five = [1, 2, 3, 4, 5]
+        check("three accounts all get tabs", AccountPickerState.tabs([1, 2, 3], active: 3, viewed: 2) == [1, 2, 3])
+        check("more accounts show the first three", AccountPickerState.tabs(five, active: 1, viewed: 1) == [1, 2, 3])
+        check("the viewed account always has a tab", AccountPickerState.tabs(five, active: 1, viewed: 5) == [1, 2, 5])
+        check("the active account always has a tab", AccountPickerState.tabs(five, active: 5, viewed: 1) == [1, 2, 5])
+        check("active and viewed both keep tabs", AccountPickerState.tabs(five, active: 4, viewed: 5) == [1, 4, 5])
+        check("tabs keep list order", AccountPickerState.tabs([5, 3, 1, 2], active: 1, viewed: 2) == [5, 1, 2])
 
         // Per-model limits
         let fable = row(#"{"number":3,"usage":{"scoped":[{"pct":40,"name":"Fable"},{"pct":10,"name":"Other"}]}}"#)

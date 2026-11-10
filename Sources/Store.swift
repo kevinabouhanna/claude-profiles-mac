@@ -70,6 +70,10 @@ final class Store: ObservableObject {
     @Published var busy = false
     @Published var openAtLogin = SMAppService.mainApp.status == .enabled
     @Published var lastUpdated: Date?
+    /// When the account in use last changed, by any route: this app, Auto-Switch or the CLI.
+    @Published var switchedAt: Date?
+    /// "Switching to Work…" while a switch this app started is running.
+    @Published var switching: String?
 
     private var timer: Timer?
     private(set) var refreshCount = 0
@@ -104,11 +108,20 @@ final class Store: ObservableObject {
         accounts = parsed.accounts.map { carryOver($0) }
         lastUpdated = Date()
         let active = activeAccount
-        if let previous = lastActive, let active, active.number != previous, Prefs.shared.notifyOnSwitch {
-            Notifier.post(
-                "Now using \(active.displayName)",
-                "Takes effect within about 30 seconds. Restart Claude Code to apply it right away."
-            )
+        if let previous = lastActive, let active, active.number != previous {
+            switchedAt = Date()
+            if let app = NSApp {
+                NSAccessibility.post(element: app, notification: .announcementRequested, userInfo: [
+                    .announcement: "Claude Code now uses \(active.displayName)",
+                    .priority: NSAccessibilityPriorityLevel.high.rawValue,
+                ])
+            }
+            if Prefs.shared.notifyOnSwitch {
+                Notifier.post(
+                    "Now using \(active.displayName)",
+                    "Takes effect within about 30 seconds. Restart Claude Code to apply it right away."
+                )
+            }
         }
         lastActive = active?.number
         return true
@@ -172,6 +185,7 @@ final class Store: ObservableObject {
             await MainActor.run { [failed] in
                 let store = Store.shared
                 store.busy = false
+                store.switching = nil
                 if let failed { store.report(failure, detail: failed.text) }
                 store.refresh()
             }
@@ -206,12 +220,16 @@ final class Store: ObservableObject {
     }
 
     func switchTo(_ account: Account) {
+        guard !busy else { return }
+        switching = "Switching to \(account.displayName)…"
         perform(["switch", String(account.number)], failure: "Couldn't switch to \(account.displayName).")
     }
 
     /// "next-available" rotates in order, skipping accounts at a limit; "best" jumps
     /// to the one with the most usage left.
     func switchUsing(strategy: String) {
+        guard !busy else { return }
+        switching = "Switching…"
         perform(["switch", "--strategy", strategy], failure: "Couldn't switch accounts.")
     }
 

@@ -14,8 +14,8 @@
 
 **[⬇️ Download for Mac](https://github.com/kevinabouhanna/claude-profiles-mac/releases/latest/download/ClaudeProfiles.dmg)** · [All releases](https://github.com/kevinabouhanna/claude-profiles-mac/releases) · [Windows version](https://github.com/kevinabouhanna/claude-profiles-windows)
 
-<img src="docs/images/dropdown-dark.png" alt="The dropdown in dark mode: the active account, named Personal Max, above Session and Weekly usage cards with pace markers" width="320">
-<img src="docs/images/dropdown-accounts-light.png" alt="The dropdown in light mode with the account list open, showing three accounts and a Switch button on each inactive one" width="320">
+<img src="docs/images/dropdown-dark.png" alt="The dropdown in dark mode: tabs for the Work and Personal accounts with Work selected and marked in use, Session and Weekly usage cards with pace markers, and a status bar reading Using Work with a Switch menu" width="320">
+<img src="docs/images/dropdown-viewing-light.png" alt="The dropdown in light mode looking at the Personal tab while the status bar still reads Using Work" width="320">
 <br><sub>Demo data.</sub>
 
 </div>
@@ -31,7 +31,7 @@ usage, and opens into a Liquid Glass dropdown with the detail.
 |---|---|
 | 📊 **Usage at a glance** | Session and weekly percentages in the menu bar, with pace and reset times in the dropdown for any account, not only the one in use. Per-model limits (Fable's is hidden by default) can be shown in Settings → General. |
 | 📏 **Know your pace** | A marker on each bar shows where even usage would put you, and a forecast says whether you'll run out before the reset. |
-| 🔁 **One-click switching** | Open the account list in the dropdown and click Switch. |
+| 🔁 **Quick switching** | The status bar at the bottom of the dropdown always says which account Claude Code is using; its Switch menu lists every account with its numbers. |
 | 🏷️ **Name your accounts** | Call them Work, Personal or anything else, spaces included, instead of reading email addresses. |
 | 🤖 **Auto-Switch** | Optionally moves to another account when the active one nears its limit (`cswap auto`). |
 | 🎨 **Your menu bar, your style** | Layout, separator, labels, size and weight, and colors that follow the menu bar, follow your usage, or are custom, with separate light and dark picks. |
@@ -48,7 +48,7 @@ It needs macOS 26 or later, on Apple silicon or Intel.
 
 ## Using it
 
-- **Left-click** the numbers for the dropdown. Click the active account to see the others; click one of them to see its usage and pace without switching, or click Switch.
+- **Left-click** the numbers for the dropdown. Click an account's tab to see its usage and pace without switching; a green dot marks the one in use. With more than three accounts, the arrow after the tabs lists them all. To switch, use the Switch menu in the status bar at the bottom.
 - **Right-click** for Settings and Quit.
 - **Rename an account:** Settings → Accounts → ••• → Rename…
 - The dropdown closes when you click anywhere else, including another menu bar item, press Esc, or switch apps.
