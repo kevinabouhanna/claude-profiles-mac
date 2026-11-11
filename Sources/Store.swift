@@ -106,10 +106,10 @@ final class Store: ObservableObject {
     func load(_ data: Data) -> Bool {
         guard let parsed = try? JSONDecoder().decode(ListOutput.self, from: data) else { return false }
         accounts = parsed.accounts.map { carryOver($0) }
-        lastUpdated = Date()
+        lastUpdated = clock()
         let active = activeAccount
         if let previous = lastActive, let active, active.number != previous {
-            switchedAt = Date()
+            switchedAt = clock()
             if let app = NSApp {
                 NSAccessibility.post(element: app, notification: .announcementRequested, userInfo: [
                     .announcement: "Claude Code now uses \(active.displayName)",
@@ -129,7 +129,7 @@ final class Store: ObservableObject {
 
     /// Keeps the last good reading while cswap reports a passing problem, so a sign-in
     /// token being renewed doesn't blank the numbers. Marked so the dropdown says how old it is.
-    func carryOver(_ account: Account, now: Date = Date()) -> Account {
+    func carryOver(_ account: Account, now: Date = clock()) -> Account {
         let key = account.nicknameKey
         if let usage = account.usage {
             lastGood[key] = (usage, account.usageFetchedAt)

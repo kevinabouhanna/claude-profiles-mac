@@ -1,0 +1,13 @@
+{
+  "render": {
+    "build": ["./build.sh"],
+    "command": ["env", "TZ=UTC", "build/Claude Profiles.app/Contents/MacOS/ClaudeProfiles", "--snapshot-panel", "shots/demo.json", "{out}"]
+  },
+  "shots": [
+    {"name": "dropdown", "file": "docs/images/dropdown-dark.png", "render": "panel-active-dark.png"},
+    {"name": "dropdown-viewing", "file": "docs/images/dropdown-viewing-light.png", "render": "panel-account-2-light.png"}
+  ],
+  "assets": [
+    {"file": "docs/images/logo.png", "none": "the app's icon"}
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "repo": "kevinabouhanna/claude-profiles-mac",
+  "shots": {
+    "vendor": "scripts/shots-kit.swift"
+  }
+}
