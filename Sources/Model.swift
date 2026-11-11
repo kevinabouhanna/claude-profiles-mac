@@ -96,8 +96,12 @@ let passingUsageStatuses: Set<String> = ["token_expired", "unavailable", "keycha
 /// How old a carried-over reading may get before it's dropped.
 let carryOverLimit: TimeInterval = 6 * 3600
 
+/// The time the app takes as now. The snapshot modes set it to their fixture's `now`, so
+/// what they draw ("Resets Today 5:21 PM", the pace) is the same on every run.
+nonisolated(unsafe) var clock: () -> Date = { Date() }
+
 /// "just now", "12 min ago", "3 h ago".
-func ageText(since date: Date, now: Date = Date()) -> String {
+func ageText(since date: Date, now: Date = clock()) -> String {
     let minutes = Int(now.timeIntervalSince(date) / 60)
     if minutes < 1 { return "just now" }
     if minutes < 60 { return "\(minutes) min ago" }
@@ -223,7 +227,7 @@ struct Window {
 
     enum Severity { case fine, overPace, critical }
 
-    init(raw: RawWindow?, period: TimeInterval, fetchedAt: Date?, now: Date = Date()) {
+    init(raw: RawWindow?, period: TimeInterval, fetchedAt: Date?, now: Date = clock()) {
         var measured = raw?.pct ?? 0
         var reset = raw?.resetsAt.flatMap(parseISO)
         var measuredAt = fetchedAt ?? now
@@ -285,13 +289,15 @@ struct Window {
     var display: Int { Int(pct.rounded()) }
 }
 
-func formatWhen(_ date: Date, now: Date = Date()) -> String {
+func formatWhen(_ date: Date, now: Date = clock()) -> String {
     let cal = Calendar.current
     let time = DateFormatter()
     time.dateFormat = "h:mm a"
     let clock = time.string(from: date)
     if cal.isDate(date, inSameDayAs: now) { return "Today \(clock)" }
-    if cal.isDateInTomorrow(date) { return "Tomorrow \(clock)" }
+    if let tomorrow = cal.date(byAdding: .day, value: 1, to: now), cal.isDate(date, inSameDayAs: tomorrow) {
+        return "Tomorrow \(clock)"
+    }
     let day = DateFormatter()
     day.dateFormat = "MMM d"
     return "\(day.string(from: date)), \(clock)"

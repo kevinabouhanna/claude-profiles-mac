@@ -24,3 +24,9 @@ jobs:
       # See scripts/energy-test.sh for the limits.
       - name: Energy test
         run: ./scripts/energy-test.sh
+      # Every image the README uses is listed in shots/shots.json, with what it shows
+      # (product-kit's shots-kit, vendored in scripts/).
+      - name: Asset check
+        run: |
+          swiftc -O -parse-as-library scripts/shots-kit.swift scripts/AccessibilityAudit.swift -o build/shots-kit
+          build/shots-kit coverage

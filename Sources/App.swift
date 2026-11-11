@@ -550,8 +550,28 @@ enum Debug {
         }
     }
 
+    /// `cswap list --json` output, and optionally what makes a snapshot the same on every
+    /// run: `now`, the time the app takes as now (ISO 8601), and `defaults`, settings that
+    /// stand in for this Mac's own for this run only (`accountNicknames`,
+    /// `autoSwitchEnabled`, `hiddenModelLimits`…). Nothing is written to the real ones.
     private static func loadFixture(_ path: String) -> Bool {
-        guard let data = FileManager.default.contents(atPath: path), Store.shared.load(data) else {
+        guard let data = FileManager.default.contents(atPath: path),
+              let top = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("could not parse \(path)")
+            return false
+        }
+        if let now = top["now"] as? String {
+            guard let date = parseISO(now) else {
+                print("\(path): now isn't an ISO 8601 date: \(now)")
+                return false
+            }
+            clock = { date }
+        }
+        if let defaults = top["defaults"] as? [String: Any] {
+            // The argument domain is read before the app's own and never saved.
+            UserDefaults.standard.setVolatileDomain(defaults, forName: UserDefaults.argumentDomain)
+        }
+        guard Store.shared.load(data) else {
             print("could not parse \(path)")
             return false
         }
@@ -632,7 +652,7 @@ enum Debug {
         func plain() { state.reset(); store.switchedAt = nil; store.switching = nil }
         var shots: [(String, () -> Void)] = [
             ("active", plain),
-            ("switched", { plain(); store.switchedAt = Date().addingTimeInterval(1) }),
+            ("switched", { plain(); store.switchedAt = clock().addingTimeInterval(1) }),
             ("switching", { plain(); store.switching = "Switching to \(store.accounts.last?.displayName ?? "")…" }),
         ]
         for account in store.accounts where account.active != true {

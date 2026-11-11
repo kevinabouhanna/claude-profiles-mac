@@ -47,6 +47,27 @@ through without asking. What's particular to this repo:
 - Test commands (`scripts/energy-test.sh` shows how) go to
   `com.kevinabouhanna.ClaudeProfiles.test.<pid>`, which only that process answers.
 
+## The README's pictures
+
+They're drawn by the app, never captured from the screen (#28): `--snapshot-panel` renders
+the dropdown out of sight from the made-up accounts in `shots/demo.json`.
+`shots/shots.json` says which drawing each picture is. product-kit's `shots-kit` (the
+`product-kit` plugin's `shots-kit` skill; `scripts/shots-kit.swift` is its copy for CI) keeps
+them current:
+
+- **A change to the dropdown runs `shots-kit check`.** It builds, draws, and compares each
+  drawing with its picture pixel by pixel. If one differs, `shots-kit update` redraws it:
+  commit it in the same pull request, and fix its alt text in the README if what it shows
+  changed.
+- **Every drawing is the same on every run**, so a pixel that differs means the dropdown
+  did. The fixture's `now` is the time the snapshot modes take as now, and its `defaults`
+  stand in for this Mac's settings (nicknames, Auto-Switch, hidden model limits), never
+  written to them. Something new the dropdown shows that depends on the time or a setting
+  reads it the same way (`clock()`, `UserDefaults.standard`).
+- **Every image the README uses is listed** in `shots/shots.json`, as a shot or under
+  `assets` with what it shows; CI fails on one that isn't (`shots-kit coverage`).
+- Updating product-kit's copy: `shots-kit vendor`, in its own pull request.
+
 ## Releasing
 
 1. CI is green on `main`, energy test included.

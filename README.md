@@ -70,6 +70,11 @@ CI and the release workflow run it too, and a release can't be cut if it fails.
 ./scripts/energy-test.sh
 ```
 
+The README's pictures are drawn by the app from made-up accounts (`shots/demo.json`), never
+captured from the screen. After changing the dropdown, `shots-kit check` (from the
+[product-kit](https://github.com/kevinabouhanna/product-kit) Claude Code plugin) says whether
+they changed, and `shots-kit update` redraws them.
+
 `./build.sh --release` signs with a Developer ID, notarizes, staples and builds a disk image; see the
 top of `build.sh` for what it needs. Releases are cut by pushing a `v*` tag, which runs
 `.github/workflows/release.yml`. It needs these repository secrets:

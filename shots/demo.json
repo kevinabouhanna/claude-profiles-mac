@@ -1,0 +1,26 @@
+{
+  "now": "2026-11-10T15:21:00Z",
+  "defaults": {
+    "accountNicknames": {"work@example.com": "Work", "personal@example.com": "Personal"},
+    "autoSwitchEnabled": true,
+    "hiddenModelLimits": ["Fable"]
+  },
+  "accounts": [
+    {
+      "number": 1, "email": "work@example.com", "active": true, "usageStatus": "ok",
+      "usageFetchedAt": "2026-11-10T15:21:00Z",
+      "usage": {
+        "fiveHour": {"pct": 62, "resetsAt": "2026-11-10T17:21:00Z"},
+        "sevenDay": {"pct": 70, "resetsAt": "2026-11-14T15:21:00Z"}
+      }
+    },
+    {
+      "number": 2, "email": "personal@example.com", "active": false, "usageStatus": "ok",
+      "usageFetchedAt": "2026-11-10T15:21:00Z",
+      "usage": {
+        "fiveHour": {"pct": 9, "resetsAt": "2026-11-10T17:21:00Z"},
+        "sevenDay": {"pct": 4, "resetsAt": "2026-11-14T15:21:00Z"}
+      }
+    }
+  ]
+}

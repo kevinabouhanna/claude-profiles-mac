@@ -1,4 +1,5 @@
 build/
+.claude/worktrees/
 .DS_Store
 *.p12
 *.p8
