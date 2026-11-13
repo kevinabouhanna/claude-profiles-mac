@@ -4,7 +4,7 @@
 
 # Claude Profiles for Mac
 
-**Every Claude Code account's usage in your Mac's menu bar, and one-click switching between them.**
+**<!-- product-kit: pitch -->Every Claude Code account's usage in your Mac's menu bar, and one-click switching between them.<!-- /product-kit -->**
 
 [![Latest release](https://img.shields.io/github/v/release/kevinabouhanna/claude-profiles-mac?label=download&color=0A84FF)](https://github.com/kevinabouhanna/claude-profiles-mac/releases/latest)
 [![CI](https://github.com/kevinabouhanna/claude-profiles-mac/actions/workflows/ci.yml/badge.svg)](https://github.com/kevinabouhanna/claude-profiles-mac/actions/workflows/ci.yml)
@@ -44,7 +44,7 @@ usage, and opens into a Liquid Glass dropdown with the detail.
 2. [Download the disk image](https://github.com/kevinabouhanna/claude-profiles-mac/releases/latest/download/ClaudeProfiles.dmg), open it, and drag **Claude Profiles** to Applications.
 
 The app is signed with a Developer ID and notarized by Apple, so it opens without a warning.
-It needs macOS 26 or later, on Apple silicon or Intel.
+It needs <!-- product-kit: requires -->macOS 26 or later<!-- /product-kit -->, on Apple silicon or Intel.
 
 ## Using it
 
