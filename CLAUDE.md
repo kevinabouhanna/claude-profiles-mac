@@ -52,7 +52,7 @@ through without asking. What's particular to this repo:
 They're drawn by the app, never captured from the screen (#28): `--snapshot-panel` renders
 the dropdown out of sight from the made-up accounts in `shots/demo.json`.
 `shots/shots.json` says which drawing each picture is. product-kit's `shots-kit` (the
-`product-kit` plugin's `shots-kit` skill; `scripts/shots-kit.swift` is its copy for CI) keeps
+`product-kit` plugin's `product-kit` skill; `scripts/shots-kit.swift` is its copy for CI) keeps
 them current:
 
 - **A change to the dropdown runs `shots-kit check`.** It builds, draws, and compares each
