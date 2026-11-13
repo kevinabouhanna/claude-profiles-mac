@@ -35,6 +35,14 @@ through without asking. What's particular to this repo:
 - Branches are named after the issue, e.g. `reorder-accounts-12`.
 - Install with `./build.sh --install` from the updated `main`, so the installed app is what
   was merged.
+- **The plan** is `docs/PLAN.md` and `docs/phases/`, kept the same as the issues, milestones and
+  the [project board](https://github.com/users/kevinabouhanna/projects/7) by product-kit's
+  docs-kit (`scripts/docs-kit`, `plan` in `.product-kit.json`; the root issue is #42). A new
+  issue goes under its phase's issue (or in its milestone) with an Order and a Horizon; then
+  `python3 -I scripts/docs-kit plan sync` and `python3 -I scripts/docs-kit plan check` (the `plan`
+  check in local CI), and the new item named on its phase's page. Run them from your worktree.
+- **Local CI:** `local-ci <pr>` from your worktree (`.claude/ci.conf.sh`: `build` and `plan`).
+- Before a pull request, `product-kit status`; for a release, `product-kit status --release`.
 
 ## Checking a change
 
