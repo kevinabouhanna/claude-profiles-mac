@@ -2,5 +2,9 @@
   "repo": "kevinabouhanna/claude-profiles-mac",
   "shots": {
     "vendor": "scripts/shots-kit.swift"
+  },
+  "facts": {
+    "pitch": "Every Claude Code account's usage in your Mac's menu bar, and one-click switching between them.",
+    "requires": "macOS 26 or later"
   }
 }
