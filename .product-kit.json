@@ -6,5 +6,21 @@
   "facts": {
     "pitch": "Every Claude Code account's usage in your Mac's menu bar, and one-click switching between them.",
     "requires": "macOS 26 or later"
+  },
+  "vendor": "scripts/docs-kit",
+  "plan": {
+    "pages": "docs/phases",
+    "index": "docs/phases/README.md",
+    "doc": "docs/PLAN.md",
+    "project": {
+      "owner": "kevinabouhanna",
+      "number": 7
+    },
+    "fields": {
+      "order": "Order",
+      "horizon": "Horizon",
+      "start": "Start date",
+      "target": "Target date"
+    }
   }
 }
