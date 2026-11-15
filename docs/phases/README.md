@@ -17,6 +17,12 @@ Each phase is a milestone on GitHub and a page here; each plan is an issue, in t
 |---|---|---|
 | 4 | #31 Show the API credits left, only when there are some | [Phase 3: API credits](03-api-credits.md) |
 
+## Later
+
+| Order | Plan | Phase |
+|---|---|---|
+| 99 | #48 Keep the tooling and the plan in order | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
+
 ## Done
 
 [Phase 1: The app](01-the-app.md)

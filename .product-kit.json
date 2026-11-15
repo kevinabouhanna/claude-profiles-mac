@@ -22,5 +22,6 @@
       "start": "Start date",
       "target": "Target date"
     }
-  }
+  },
+  "upkeep": 48
 }
