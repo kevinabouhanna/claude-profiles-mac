@@ -21,3 +21,9 @@ ci_job_plan() {
     echo "plan: skipped, because gh isn't signed in to GitHub here, so the plan can't be read"
   fi
 }
+
+# The finish gate's quick check (claude-parallel-sessions#146): before a session may stop its turn
+# with changes, the app's Swift type-checked as build.sh compiles it, without building, about 4 s.
+ci_quick() {
+  swiftc -parse-as-library -swift-version 5 -target arm64-apple-macos26 -typecheck Sources/*.swift
+}
