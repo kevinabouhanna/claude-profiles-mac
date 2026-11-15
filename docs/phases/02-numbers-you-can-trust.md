@@ -13,4 +13,6 @@ forecast tell you something true about your usage.
 - #30 **A forecast that means something**: "runs out tomorrow" only from the pace you're
   actually using it at, nothing for an account you haven't used in days; or no forecast, only
   over or under pace.
-- #35 The plan itself, so the board and these pages say the same.
+- #48 **Keep the tooling and the plan in order**, a standing item: product-kit's tools kept
+  current (each update is a step of it), local CI, and the board and these pages saying the
+  same, which the plan itself (#35) started on 13 Nov.
