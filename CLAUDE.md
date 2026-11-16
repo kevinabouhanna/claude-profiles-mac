@@ -41,6 +41,9 @@ through without asking. What's particular to this repo:
   issue goes under its phase's issue (or in its milestone) with an Order and a Horizon; then
   `python3 -I scripts/docs-kit plan sync` and `python3 -I scripts/docs-kit plan check` (the `plan`
   check in local CI), and the new item named on its phase's page. Run them from your worktree.
+  In a pull request's CI it's `plan check --pr` (#59): a pull request that changes no plan page
+  only warns about what other sessions changed on GitHub after its branch was taken; one that
+  changes a plan page is checked in full, as by hand and on `main`.
 - **Local CI:** `local-ci <pr>` from your worktree (`.claude/ci.conf.sh`: `build` and `plan`).
 - Before a pull request, `product-kit status`; for a release, `product-kit status --release`.
 

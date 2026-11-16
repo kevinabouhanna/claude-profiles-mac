@@ -13,10 +13,12 @@ ci_job_build() {
     build/shots-kit coverage
 }
 
-# The plan's pages agree with GitHub's issues, milestones and board (#35).
+# The plan's pages agree with GitHub's issues, milestones and board (#35). In a pull request
+# (local-ci sets CI_PR), one that changes no plan page only warns about what other sessions
+# changed on GitHub after its branch was taken (#59, product-kit#101).
 ci_job_plan() {
   if gh auth status --hostname github.com --active >/dev/null 2>&1; then
-    python3 -I scripts/docs-kit plan check
+    python3 -I scripts/docs-kit plan check ${CI_PR:+--pr}
   else
     echo "plan: skipped, because gh isn't signed in to GitHub here, so the plan can't be read"
   fi
