@@ -838,6 +838,16 @@ enum Debug {
         check("an app's claude -p is a background helper", SwitchRefusal.isBackground(tty: "??", args: "/Users/me/.local/bin/claude -p --input-format stream-json"))
         check("a terminal's claude is not", !SwitchRefusal.isBackground(tty: "ttys001", args: "/Users/me/.local/bin/claude -p"))
         check("an interactive claude is not", !SwitchRefusal.isBackground(tty: "??", args: "/Users/me/.local/bin/claude --resume x"))
+        check("print mode is seen past a path with spaces", SwitchRefusal.isBackground(tty: "??", args: "/Applications/My App.app/Contents/Resources/claude --output-format stream-json -p"))
+        check("the refused account, not another named before it",
+              SwitchRefusal.parse("Current: Account-2 (w@x) [Work]\nError: Account-1 (me@example.com) has a live session-mode Claude instance (PID 5).")?.account == 1)
+        let runner = SwitchRefusal.Helper(pid: 62488, app: "Some Agent Runner", background: true)
+        check("Home Control's helpers are stopped", parsed.map { SwitchRefusal.canStop($0, tony) } == true)
+        check("another app's Claude is never stopped", parsed.map { SwitchRefusal.canStop($0, [tony[0], runner]) } == false)
+        check("a terminal Claude is never stopped",
+              parsed.map { SwitchRefusal.canStop($0, [SwitchRefusal.Helper(pid: 1, app: "Home Control", background: false)]) } == false)
+        check("helpers already gone: switch again", parsed.map { SwitchRefusal.canStop($0, []) } == true)
+        check("no processes named: nothing to stop", SwitchRefusal.parse(rotated).map { SwitchRefusal.canStop($0, []) } == false)
         let sleeper = Process()
         sleeper.executableURL = URL(fileURLWithPath: "/bin/sleep")
         sleeper.arguments = ["30"]

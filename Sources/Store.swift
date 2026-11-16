@@ -213,16 +213,29 @@ final class Store: ObservableObject {
         let names = Dictionary(accounts.map { ($0.number, $0.displayName) }, uniquingKeysWith: { a, _ in a })
         Task.detached {
             var result = CLI.run(CLI.cswap, args)
+            var explained: String?
             if !result.ok, let refusal = SwitchRefusal.parse(result.text) {
-                let helpers = SwitchRefusal.lookUp(refusal.pids)
-                if !helpers.isEmpty, helpers.allSatisfy(\.background), SwitchRefusal.stop(refusal.pids) {
-                    result = CLI.run(CLI.cswap, args)
+                var helpers = SwitchRefusal.lookUp(refusal.pids)
+                if SwitchRefusal.canStop(refusal, helpers) {
+                    let stopped = SwitchRefusal.stop(helpers.map(\.pid))
+                    switchLog.notice("""
+                        Switch refused for a session sign-in; stopped \(helpers.count) background \
+                        helper(s) \(helpers.map { "\($0.pid) (\($0.app ?? "?"))" }.joined(separator: ", "), privacy: .public): \
+                        \(stopped ? "gone" : "still running", privacy: .public)
+                        """)
+                    if stopped {
+                        result = CLI.run(CLI.cswap, args)
+                        switchLog.notice("Switch tried again: \(result.ok ? "switched" : "refused again", privacy: .public)")
+                    }
+                    if !result.ok, let again = SwitchRefusal.parse(result.text) {
+                        helpers = SwitchRefusal.lookUp(again.pids)
+                        explained = again.explain(names: names, helpers: helpers)
+                    }
+                } else {
+                    explained = refusal.explain(names: names, helpers: helpers)
                 }
             }
-            let explained = result.ok ? nil : SwitchRefusal.parse(result.text).map {
-                $0.explain(names: names, helpers: SwitchRefusal.lookUp($0.pids))
-            }
-            await MainActor.run { [result] in
+            await MainActor.run { [result, explained] in
                 let store = Store.shared
                 store.busy = false
                 store.switching = nil

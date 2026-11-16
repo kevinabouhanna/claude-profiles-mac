@@ -331,9 +331,11 @@ struct PanelView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
-            ForEach([store.actionProblem, store.problem].compactMap { $0 }, id: \.self) { problem in
-                Text(problem).font(.system(size: 11)).foregroundColor(Palette.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+            ForEach(Array([store.actionProblem, store.problem].enumerated()), id: \.offset) { _, problem in
+                if let problem {
+                    Text(problem).font(.system(size: 11)).foregroundColor(Palette.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             if store.accounts.count > 1 { AccountTabs(store: store) }
             if let viewed = AccountPickerState.viewed(in: store.accounts, viewing: picker.viewing) {

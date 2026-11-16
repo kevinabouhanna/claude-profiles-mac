@@ -1,5 +1,9 @@
 // Why cswap refused a switch, in plain words, and the background Claude behind it.
 import Foundation
+import os
+
+/// Switches that stopped another app's Claude, so a helper that died can be traced here.
+let switchLog = Logger(subsystem: "com.kevinabouhanna.ClaudeProfiles", category: "switch")
 
 /// cswap refuses a switch when a Claude is running on the target account's own login
 /// (a session profile, as `cswap run` makes) and that login has been renewed past
@@ -24,7 +28,7 @@ struct SwitchRefusal {
     static func parse(_ text: String) -> SwitchRefusal? {
         guard text.contains("session-mode Claude instance (PID") || text.contains("rotated past the stored backup")
         else { return nil }
-        let account = firstCapture(#"Account-(\d+) \("#, in: text).flatMap { Int($0) }
+        let account = firstCapture(#"Account-(\d+) \([^)]*\) has a"#, in: text).flatMap { Int($0) }
         let pids = firstCapture(#"\(PIDs? ([\d, ]+)\)"#, in: text)
             .map { $0.split(separator: ",").compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) } } ?? []
         return SwitchRefusal(account: account, pids: pids)
@@ -112,8 +116,19 @@ struct SwitchRefusal {
 
     /// No terminal, and Claude in print mode: a helper an app keeps, not a conversation.
     static func isBackground(tty: String, args: String) -> Bool {
-        let words = args.split(separator: " ").prefix(4)
+        let words = args.split(separator: " ")
         return tty == "??" && (words.contains("-p") || words.contains("--print"))
+    }
+
+    /// Apps known to keep Claude helpers ready and start them again on their own when one
+    /// stops, so stopping one costs at most the answer it was giving. Any other app's
+    /// Claude (an agent runner, a script) may be someone's work: never stopped, only named.
+    static let restartingApps: Set<String> = ["Home Control"]
+
+    /// Stop and retry only when every Claude cswap named is such a helper, or has gone.
+    static func canStop(_ refusal: SwitchRefusal, _ helpers: [Helper]) -> Bool {
+        guard !refusal.pids.isEmpty else { return false }
+        return helpers.allSatisfy { $0.background && $0.app.map(restartingApps.contains) == true }
     }
 
     // MARK: Stopping them
