@@ -66,6 +66,13 @@ final class Store: ObservableObject {
 
     @Published var accounts: [Account] = []
     @Published var problem: String?
+    /// Why the last switch or other action failed. A refresh doesn't clear it, or a
+    /// refusal would vanish a moment after it showed (#61); the next action, the dropdown
+    /// closing, a switch made some other way, or ten minutes passing do.
+    @Published var actionProblem: String? {
+        didSet { actionProblemAt = actionProblem == nil ? nil : clock() }
+    }
+    private var actionProblemAt: Date?
     @Published var loading = false
     @Published var busy = false
     @Published var openAtLogin = SMAppService.mainApp.status == .enabled
@@ -108,8 +115,10 @@ final class Store: ObservableObject {
         accounts = parsed.accounts.map { carryOver($0) }
         lastUpdated = clock()
         let active = activeAccount
+        if let at = actionProblemAt, clock().timeIntervalSince(at) > 600 { clearActionProblem() }
         if let previous = lastActive, let active, active.number != previous {
             switchedAt = clock()
+            clearActionProblem()
             if let app = NSApp {
                 NSAccessibility.post(element: app, notification: .announcementRequested, userInfo: [
                     .announcement: "Claude Code now uses \(active.displayName)",
@@ -176,6 +185,7 @@ final class Store: ObservableObject {
     private func performAll(_ steps: [[String]], stdin: String? = nil, failure: String) {
         guard !busy else { return }
         busy = true
+        clearActionProblem()
         Task.detached {
             var failed: CLI.Result?
             for args in steps {
@@ -190,6 +200,57 @@ final class Store: ObservableObject {
                 store.refresh()
             }
         }
+    }
+
+    /// A switch. When cswap refuses it only because an app's background Claude (Home
+    /// Control's assistant, say) runs on the target account's own sign-in, that Claude is
+    /// stopped and the switch tried once more: cswap then takes over its newer sign-in, and
+    /// the app starts its Claude again on the default login (#61).
+    private func runSwitch(_ args: [String], failure: String) {
+        guard !busy else { return }
+        busy = true
+        clearActionProblem()
+        let names = Dictionary(accounts.map { ($0.number, $0.displayName) }, uniquingKeysWith: { a, _ in a })
+        Task.detached {
+            var result = CLI.run(CLI.cswap, args)
+            var explained: String?
+            if !result.ok, let refusal = SwitchRefusal.parse(result.text) {
+                var helpers = SwitchRefusal.lookUp(refusal.pids)
+                if SwitchRefusal.canStop(refusal, helpers) {
+                    let stopped = SwitchRefusal.stop(helpers.map(\.pid))
+                    switchLog.notice("""
+                        Switch refused for a session sign-in; stopped \(helpers.count) background \
+                        helper(s) \(helpers.map { "\($0.pid) (\($0.app ?? "?"))" }.joined(separator: ", "), privacy: .public): \
+                        \(stopped ? "gone" : "still running", privacy: .public)
+                        """)
+                    if stopped {
+                        result = CLI.run(CLI.cswap, args)
+                        switchLog.notice("Switch tried again: \(result.ok ? "switched" : "refused again", privacy: .public)")
+                    }
+                    if !result.ok, let again = SwitchRefusal.parse(result.text) {
+                        helpers = SwitchRefusal.lookUp(again.pids)
+                        explained = again.explain(names: names, helpers: helpers)
+                    }
+                } else {
+                    explained = refusal.explain(names: names, helpers: helpers)
+                }
+            }
+            await MainActor.run { [result, explained] in
+                let store = Store.shared
+                store.busy = false
+                store.switching = nil
+                if let explained {
+                    store.report(explained, detail: "")
+                } else if !result.ok {
+                    store.report(failure, detail: result.text)
+                }
+                store.refresh()
+            }
+        }
+    }
+
+    func clearActionProblem() {
+        if actionProblem != nil { actionProblem = nil }
     }
 
     /// Puts the accounts in this order, which is the order Next Account rotates in.
@@ -222,7 +283,7 @@ final class Store: ObservableObject {
     func switchTo(_ account: Account) {
         guard !busy else { return }
         switching = "Switching to \(account.displayName)…"
-        perform(["switch", String(account.number)], failure: "Couldn't switch to \(account.displayName).")
+        runSwitch(["switch", String(account.number)], failure: "Couldn't switch to \(account.displayName).")
     }
 
     /// "next-available" rotates in order, skipping accounts at a limit; "best" jumps
@@ -230,10 +291,11 @@ final class Store: ObservableObject {
     func switchUsing(strategy: String) {
         guard !busy else { return }
         switching = "Switching…"
-        perform(["switch", "--strategy", strategy], failure: "Couldn't switch accounts.")
+        runSwitch(["switch", "--strategy", strategy], failure: "Couldn't switch accounts.")
     }
 
     func setOpenAtLogin(_ on: Bool) {
+        clearActionProblem()
         do {
             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
             openAtLogin = on
@@ -251,7 +313,7 @@ final class Store: ObservableObject {
             alert.informativeText = String(detail.suffix(600))
             alert.beginSheetModal(for: window)
         } else {
-            problem = detail.isEmpty ? message : "\(message) \(String(detail.suffix(200)))"
+            actionProblem = detail.isEmpty ? message : "\(message) \(String(detail.suffix(200)))"
         }
     }
 }
@@ -402,6 +464,7 @@ final class AutoConfig: ObservableObject {
         case let b as Bool: args = ["config", "set", key, b ? "true" : "false"]
         default: args = ["config", "set", key, "\(value!)"]
         }
+        Store.shared.clearActionProblem()
         Self.queue.async {
             let result = CLI.run(CLI.cswap, args)
             Task { @MainActor in

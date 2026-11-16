@@ -47,6 +47,16 @@ through without asking. What's particular to this repo:
 - **Local CI:** `local-ci <pr>` from your worktree (`.claude/ci.conf.sh`: `build` and `plan`).
 - Before a pull request, `product-kit status`; for a release, `product-kit status --release`.
 
+## Logs (read first for a bug report)
+
+- cswap's own log: `~/.claude-swap-backup/claude-swap.log` (every switch, renewed sign-in and
+  usage fetch). A switch cswap refused isn't in it; the app's log has those.
+- The app's: `log show --last 1d --predicate 'subsystem == "com.kevinabouhanna.ClaudeProfiles"'`
+  (category `switch`: background Claude helpers stopped for a switch, #61; `energy`: EnergyGuard).
+- Is a switch blocked? Live Claude sessions on an account's own sign-in are listed in
+  `~/.claude-swap-backup/sessions/<n>-<email>/sessions/<pid>.json`; `ps -o ppid=,tty=,args= -p <pid>`
+  shows whose they are.
+
 ## Checking a change
 
 - `./build.sh --install` builds and installs it.
