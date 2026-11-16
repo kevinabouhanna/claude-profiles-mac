@@ -5,9 +5,10 @@
 **Goal:** what the menu bar and the dropdown say is what Claude says, and the colours and the
 forecast tell you something true about your usage.
 
-- #61 **A refused switch says why** (a bug): picking Personal did nothing when cswap refused
-  because another app ran Claude on Personal's own sign-in; the message was cleared a moment
-  later by the refresh.
+- #61 **Switching works while Home Control runs** (a bug): picking Personal did nothing when
+  cswap refused because Home Control's assistant ran Claude on Personal's own sign-in, and the
+  refresh cleared the message. The app now stops such background helpers and switches, and
+  says plainly why when it still can't.
 - #34 **An inaccurate reading** (a bug): the app showed usage that didn't match Claude's own.
   Start from the app's logs and claude-swap's output for that account.
 - #20 **Pace colours by how much is used**: green, orange and red follow the share of the limit

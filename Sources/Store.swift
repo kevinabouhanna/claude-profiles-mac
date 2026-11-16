@@ -66,10 +66,13 @@ final class Store: ObservableObject {
 
     @Published var accounts: [Account] = []
     @Published var problem: String?
-    /// Why the last switch or other action failed. A refresh never clears it, or a
-    /// refusal would vanish a moment after it showed (#61); the next action and the
-    /// dropdown closing do.
-    @Published var actionProblem: String?
+    /// Why the last switch or other action failed. A refresh doesn't clear it, or a
+    /// refusal would vanish a moment after it showed (#61); the next action, the dropdown
+    /// closing, a switch made some other way, or ten minutes passing do.
+    @Published var actionProblem: String? {
+        didSet { actionProblemAt = actionProblem == nil ? nil : clock() }
+    }
+    private var actionProblemAt: Date?
     @Published var loading = false
     @Published var busy = false
     @Published var openAtLogin = SMAppService.mainApp.status == .enabled
@@ -112,8 +115,10 @@ final class Store: ObservableObject {
         accounts = parsed.accounts.map { carryOver($0) }
         lastUpdated = clock()
         let active = activeAccount
+        if let at = actionProblemAt, clock().timeIntervalSince(at) > 600 { clearActionProblem() }
         if let previous = lastActive, let active, active.number != previous {
             switchedAt = clock()
+            clearActionProblem()
             if let app = NSApp {
                 NSAccessibility.post(element: app, notification: .announcementRequested, userInfo: [
                     .announcement: "Claude Code now uses \(active.displayName)",
@@ -177,34 +182,62 @@ final class Store: ObservableObject {
     }
 
     /// Runs cswap actions one after another, stopping at the first that fails.
-    /// `explain` turns cswap's failure text into plain words, off the main thread; nil
-    /// falls back to `failure` and the end of cswap's text.
-    private func performAll(
-        _ steps: [[String]], stdin: String? = nil, failure: String,
-        explain: (@Sendable (String) -> String?)? = nil
-    ) {
+    private func performAll(_ steps: [[String]], stdin: String? = nil, failure: String) {
         guard !busy else { return }
         busy = true
-        if actionProblem != nil { actionProblem = nil }
+        clearActionProblem()
         Task.detached {
             var failed: CLI.Result?
             for args in steps {
                 let result = CLI.run(CLI.cswap, args, stdin: stdin)
                 if !result.ok { failed = result; break }
             }
-            let explained = failed.flatMap { explain?($0.text) }
             await MainActor.run { [failed] in
+                let store = Store.shared
+                store.busy = false
+                store.switching = nil
+                if let failed { store.report(failure, detail: failed.text) }
+                store.refresh()
+            }
+        }
+    }
+
+    /// A switch. When cswap refuses it only because an app's background Claude (Home
+    /// Control's assistant, say) runs on the target account's own sign-in, that Claude is
+    /// stopped and the switch tried once more: cswap then takes over its newer sign-in, and
+    /// the app starts its Claude again on the default login (#61).
+    private func runSwitch(_ args: [String], failure: String) {
+        guard !busy else { return }
+        busy = true
+        clearActionProblem()
+        let names = Dictionary(accounts.map { ($0.number, $0.displayName) }, uniquingKeysWith: { a, _ in a })
+        Task.detached {
+            var result = CLI.run(CLI.cswap, args)
+            if !result.ok, let refusal = SwitchRefusal.parse(result.text) {
+                let helpers = SwitchRefusal.lookUp(refusal.pids)
+                if !helpers.isEmpty, helpers.allSatisfy(\.background), SwitchRefusal.stop(refusal.pids) {
+                    result = CLI.run(CLI.cswap, args)
+                }
+            }
+            let explained = result.ok ? nil : SwitchRefusal.parse(result.text).map {
+                $0.explain(names: names, helpers: SwitchRefusal.lookUp($0.pids))
+            }
+            await MainActor.run { [result] in
                 let store = Store.shared
                 store.busy = false
                 store.switching = nil
                 if let explained {
                     store.report(explained, detail: "")
-                } else if let failed {
-                    store.report(failure, detail: failed.text)
+                } else if !result.ok {
+                    store.report(failure, detail: result.text)
                 }
                 store.refresh()
             }
         }
+    }
+
+    func clearActionProblem() {
+        if actionProblem != nil { actionProblem = nil }
     }
 
     /// Puts the accounts in this order, which is the order Next Account rotates in.
@@ -237,14 +270,7 @@ final class Store: ObservableObject {
     func switchTo(_ account: Account) {
         guard !busy else { return }
         switching = "Switching to \(account.displayName)…"
-        let names = accountNames
-        performAll([["switch", String(account.number)]], failure: "Couldn't switch to \(account.displayName).",
-                   explain: { SwitchRefusal.explain($0, names: names, appFor: SwitchRefusal.appRunning) })
-    }
-
-    /// Each account's name in the dropdown, by email, for messages made off the main thread.
-    private var accountNames: [String: String] {
-        Dictionary(accounts.compactMap { a in a.email.map { ($0, a.displayName) } }, uniquingKeysWith: { a, _ in a })
+        runSwitch(["switch", String(account.number)], failure: "Couldn't switch to \(account.displayName).")
     }
 
     /// "next-available" rotates in order, skipping accounts at a limit; "best" jumps
@@ -252,12 +278,11 @@ final class Store: ObservableObject {
     func switchUsing(strategy: String) {
         guard !busy else { return }
         switching = "Switching…"
-        let names = accountNames
-        performAll([["switch", "--strategy", strategy]], failure: "Couldn't switch accounts.",
-                   explain: { SwitchRefusal.explain($0, names: names, appFor: SwitchRefusal.appRunning) })
+        runSwitch(["switch", "--strategy", strategy], failure: "Couldn't switch accounts.")
     }
 
     func setOpenAtLogin(_ on: Bool) {
+        clearActionProblem()
         do {
             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
             openAtLogin = on
@@ -277,53 +302,6 @@ final class Store: ObservableObject {
         } else {
             actionProblem = detail.isEmpty ? message : "\(message) \(String(detail.suffix(200)))"
         }
-    }
-}
-
-/// cswap refuses a switch when a Claude is running on the target account's own login
-/// (a session profile, as `cswap run` makes) and that login has been renewed past
-/// cswap's saved copy: activating the saved copy would sign Claude Code out. Its message
-/// is long and technical, so the dropdown says what to do instead (#61).
-enum SwitchRefusal {
-    /// Plain words for a refusal cswap gave because of a session login, else nil.
-    static func explain(_ text: String, names: [String: String], appFor: (Int32) -> String?) -> String? {
-        guard text.contains("session-mode Claude instance") || text.contains("session profile") else { return nil }
-        let name = firstCapture(#"Account-\d+ \(([^)\s]+)\)"#, in: text).map { names[$0] ?? $0 } ?? "that account"
-        let pids = firstCapture(#"\(PIDs? ([\d, ]+)\)"#, in: text)
-            .map { $0.split(separator: ",").compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) } } ?? []
-        let apps = Array(Set(pids.compactMap(appFor))).sorted()
-        let who = !apps.isEmpty ? "\(apps.joined(separator: " and ")) is using"
-            : pids.isEmpty ? "a Claude is running on"
-            : "Claude (process \(pids.map(String.init).joined(separator: ", "))) is using"
-        let fix = apps.isEmpty ? "Quit that Claude" : "Quit \(apps.joined(separator: " and "))"
-        return "Couldn't switch to \(name): \(who) \(name)'s own sign-in, which is newer than the saved one. \(fix), then switch again."
-    }
-
-    /// Only on a failed switch, so the regex is made then, not kept.
-    private static func firstCapture(_ pattern: String, in text: String) -> String? {
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let m = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-              let r = Range(m.range(at: 1), in: text) else { return nil }
-        return String(text[r])
-    }
-
-    /// The app a process belongs to: the first `.app` among it and its parents.
-    static func appRunning(_ pid: Int32) -> String? {
-        var current = pid
-        for _ in 0..<6 where current > 1 {
-            let line = CLI.run("/bin/ps", ["-p", String(current), "-o", "ppid=,comm="], timeout: 5).text
-            let parts = line.split(separator: " ", maxSplits: 1)
-            guard parts.count == 2, let parent = Int32(parts[0]) else { return nil }
-            if let app = appName(fromPath: String(parts[1])) { return app }
-            current = parent
-        }
-        return nil
-    }
-
-    /// "Home Control" from "/Applications/Home Control.app/Contents/MacOS/Home Control".
-    static func appName(fromPath path: String) -> String? {
-        guard let end = path.range(of: ".app/") else { return nil }
-        return path[..<end.lowerBound].split(separator: "/").last.map(String.init)
     }
 }
 
@@ -473,6 +451,7 @@ final class AutoConfig: ObservableObject {
         case let b as Bool: args = ["config", "set", key, b ? "true" : "false"]
         default: args = ["config", "set", key, "\(value!)"]
         }
+        Store.shared.clearActionProblem()
         Self.queue.async {
             let result = CLI.run(CLI.cswap, args)
             Task { @MainActor in

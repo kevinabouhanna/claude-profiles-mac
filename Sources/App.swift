@@ -334,7 +334,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
         stopWatchingMenuBar()
         anchorWindow?.orderOut(nil)
         AccountPickerState.shared.reset()  // opens on the active account next time
-        if Store.shared.actionProblem != nil { Store.shared.actionProblem = nil }
+        Store.shared.clearActionProblem()
     }
 
     // MARK: Auto-hidden menu bar
@@ -811,20 +811,48 @@ enum Debug {
 
         // A switch cswap refuses for a session login, in plain words (#61)
         let refusal = "Error: Account-1 (me@example.com) has a live session-mode Claude instance (PID 62487, 62488), and its session profile's credential has rotated past the stored backup: the backup is a consumed generation."
-        let said = SwitchRefusal.explain(refusal, names: ["me@example.com": "Personal"], appFor: { _ in "Home Control" })
+        let parsed = SwitchRefusal.parse(refusal)
+        check("refusal gives the account and processes", parsed?.account == 1 && parsed?.pids == [62487, 62488])
+        let rotated = "Error: Account-2 (me@example.com) has a session profile whose credential has rotated past the stored backup, and it could not be adopted."
+        check("refusal without processes is found", SwitchRefusal.parse(rotated)?.pids == [])
+        check("other failures aren't explained", SwitchRefusal.parse("Error: session profile directory not found for Account-2") == nil)
+        let tony = [SwitchRefusal.Helper(pid: 62487, app: "Home Control", background: true),
+                    SwitchRefusal.Helper(pid: 62488, app: "Home Control", background: true)]
+        let said = parsed?.explain(names: [1: "Personal"], helpers: tony)
         check("refusal names the account and the app", said == "Couldn't switch to Personal: Home Control is using Personal's own sign-in, which is newer than the saved one. Quit Home Control, then switch again.")
-        check("refusal without an app names the processes", SwitchRefusal.explain(refusal, names: [:], appFor: { _ in nil })?.contains("Claude (process 62487, 62488) is using me@example.com's") == true)
-        check("other failures aren't explained", SwitchRefusal.explain("Error: No account found with identifier: 9", names: [:], appFor: { _ in nil }) == nil)
+        let twoApps = parsed?.explain(names: [1: "Personal"], helpers: [tony[0], SwitchRefusal.Helper(pid: 9, app: "Terminal", background: false)])
+        check("two apps are using it", twoApps?.contains("Home Control and Terminal are using Personal's") == true)
+        check("refusal without an app names the processes", parsed?.explain(names: [:], helpers: [])
+              .contains("Couldn't switch to Account 1: Claude (processes 62487, 62488) are using Account 1's") == true)
         check("app name from its executable", SwitchRefusal.appName(fromPath: "/Applications/Home Control.app/Contents/MacOS/Home Control") == "Home Control")
         check("no app for a bare tool", SwitchRefusal.appName(fromPath: "/Users/me/.local/bin/claude") == nil)
-        if Bundle.main.bundlePath.hasSuffix(".app") {
-            let ownApp = (Bundle.main.bundlePath as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "")
-            check("a process's app is found", SwitchRefusal.appRunning(getpid()) == ownApp)
+        let table = SwitchRefusal.processTable("""
+                1     0 /sbin/launchd
+              500     1 /Applications/Home Control.app/Contents/MacOS/Home Control
+              600   500 /Users/me/.local/bin/cswap
+              700   600 /Users/me/.local/bin/claude
+              800     1 /Users/me/.local/bin/claude
+            """)
+        check("a process's app is found up its parents", SwitchRefusal.app(of: 700, in: table) == "Home Control")
+        check("a process outside any app has none", SwitchRefusal.app(of: 800, in: table) == nil)
+        check("an app's claude -p is a background helper", SwitchRefusal.isBackground(tty: "??", args: "/Users/me/.local/bin/claude -p --input-format stream-json"))
+        check("a terminal's claude is not", !SwitchRefusal.isBackground(tty: "ttys001", args: "/Users/me/.local/bin/claude -p"))
+        check("an interactive claude is not", !SwitchRefusal.isBackground(tty: "??", args: "/Users/me/.local/bin/claude --resume x"))
+        let sleeper = Process()
+        sleeper.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        sleeper.arguments = ["30"]
+        if (try? sleeper.run()) != nil {
+            let pid = sleeper.processIdentifier
+            check("a running process isn't gone", !SwitchRefusal.gone(pid))
+            check("stopping a helper waits until it has gone", SwitchRefusal.stop([pid], limit: 5))
+            sleeper.waitUntilExit()
+        } else {
+            check("sleep starts", false)
         }
         let shownBefore = store.problem
         store.report("Couldn't switch.", detail: "")
         check("a failed action's message isn't the refresh's", store.actionProblem == "Couldn't switch." && store.problem == shownBefore)
-        store.actionProblem = nil
+        store.clearActionProblem()
 
         // Menu bar strip
         let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
