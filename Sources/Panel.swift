@@ -331,7 +331,7 @@ struct PanelView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
-            if let problem = store.problem {
+            if let problem = store.actionProblem ?? store.problem {
                 Text(problem).font(.system(size: 11)).foregroundColor(Palette.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }

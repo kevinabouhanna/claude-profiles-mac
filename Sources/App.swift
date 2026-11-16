@@ -334,6 +334,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
         stopWatchingMenuBar()
         anchorWindow?.orderOut(nil)
         AccountPickerState.shared.reset()  // opens on the active account next time
+        if Store.shared.actionProblem != nil { Store.shared.actionProblem = nil }
     }
 
     // MARK: Auto-hidden menu bar
@@ -807,6 +808,23 @@ enum Debug {
         let events = SwitchLog.parse(log)
         check("history newest first", events.first?.to == 2 && events.first?.when == "2026-06-28 09:00")
         check("history skips noise", events.count == 2)
+
+        // A switch cswap refuses for a session login, in plain words (#61)
+        let refusal = "Error: Account-1 (me@example.com) has a live session-mode Claude instance (PID 62487, 62488), and its session profile's credential has rotated past the stored backup: the backup is a consumed generation."
+        let said = SwitchRefusal.explain(refusal, names: ["me@example.com": "Personal"], appFor: { _ in "Home Control" })
+        check("refusal names the account and the app", said == "Couldn't switch to Personal: Home Control is using Personal's own sign-in, which is newer than the saved one. Quit Home Control, then switch again.")
+        check("refusal without an app names the processes", SwitchRefusal.explain(refusal, names: [:], appFor: { _ in nil })?.contains("Claude (process 62487, 62488) is using me@example.com's") == true)
+        check("other failures aren't explained", SwitchRefusal.explain("Error: No account found with identifier: 9", names: [:], appFor: { _ in nil }) == nil)
+        check("app name from its executable", SwitchRefusal.appName(fromPath: "/Applications/Home Control.app/Contents/MacOS/Home Control") == "Home Control")
+        check("no app for a bare tool", SwitchRefusal.appName(fromPath: "/Users/me/.local/bin/claude") == nil)
+        if Bundle.main.bundlePath.hasSuffix(".app") {
+            let ownApp = (Bundle.main.bundlePath as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "")
+            check("a process's app is found", SwitchRefusal.appRunning(getpid()) == ownApp)
+        }
+        let shownBefore = store.problem
+        store.report("Couldn't switch.", detail: "")
+        check("a failed action's message isn't the refresh's", store.actionProblem == "Couldn't switch." && store.problem == shownBefore)
+        store.actionProblem = nil
 
         // Menu bar strip
         let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)

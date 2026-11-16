@@ -8,6 +8,7 @@ Each phase is a milestone on GitHub and a page here; each plan is an issue, in t
 | Order | Plan | Phase |
 |---|---|---|
 | 1 | #34 bug: innacurate reading | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
+| 1 | #61 Switch to Personal fails silently when another app runs Claude on Personal | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
 | 2 | #20 usage pace coloring logic | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
 | 3 | #30 prediction logic | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
 
