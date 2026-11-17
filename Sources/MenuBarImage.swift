@@ -101,6 +101,13 @@ final class Prefs: ObservableObject {
     @Published var notifyOnSwitch: Bool {
         didSet { Self.defaults.set(notifyOnSwitch, forKey: "notifyOnSwitch") }
     }
+    /// API credits from the Claude Console (#31): off by default, as it needs a sign-in.
+    @Published var showAPICredits: Bool {
+        didSet {
+            Self.defaults.set(showAPICredits, forKey: "showAPICredits")
+            CreditsMonitor.shared.sync()
+        }
+    }
     @Published var autoSwitchEnabled: Bool {
         didSet {
             Self.defaults.set(autoSwitchEnabled, forKey: "autoSwitchEnabled")
@@ -115,6 +122,7 @@ final class Prefs: ObservableObject {
         refreshInterval = interval > 0 ? interval : 60
         notifyOnSwitch = d.object(forKey: "notifyOnSwitch") as? Bool ?? true
         autoSwitchEnabled = d.bool(forKey: "autoSwitchEnabled")
+        showAPICredits = d.bool(forKey: "showAPICredits")
     }
 }
 

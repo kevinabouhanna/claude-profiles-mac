@@ -463,7 +463,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UsageHistory.shared = UsageHistory(defaults: energyTest ? nil : .standard)
         status = StatusController()
         Store.shared.start()
-        if !energyTest { AutoSwitcher.shared.sync() }
+        if !energyTest {
+            AutoSwitcher.shared.sync()
+            CreditsMonitor.shared.sync()
+        }
     }
 
     /// The Dock icon, there while Settings is open.
@@ -1063,6 +1066,59 @@ enum Debug {
         check("reorder keeps sparse slot numbers", reordered([2, 5, 9], [9, 2, 5]) == [9, 2, 5])
         check("unchanged order moves nothing", SlotOrder.moves(slots: [1, 2, 3], order: [1, 2, 3]).isEmpty)
         check("window in front skips other layers", WindowStack.window(inFrontOf: 3, in: stack) == 2 && WindowStack.window(inFrontOf: 2, in: stack) == nil)
+
+        // API credits (#31), from the Console's own answers (the Max one is Kevin's, 17 Nov)
+        let creditsNow = parseISO("2026-11-17T12:00:00Z")!
+        func credits(_ json: String) -> CreditBalance? { CreditBalance.parse(Data(json.utf8), checkedAt: creditsNow) }
+        let maxJSON = """
+            {"amount":10000,"currency":"USD","balance":{"money":null,"credits":{"amount_minor":10000,"exponent":2}},
+             "amount_without_scoped_credits":0,"tranches":[],"next_expires_at":"2026-12-12T00:00:00Z",
+             "promo_tranches":[{"remaining_amount_minor_units":10000,"currency":"USD","expires_at":"2026-12-12T00:00:00Z",
+               "granted_amount_minor_units":10000,"granted_at":"2026-11-17T08:48:24.170000Z","program_id":"subscription_api_credit",
+               "name":"API credit (Max)","id":"cace1760-884e-48bd-b969-1702e40c5147","scope":null}]}
+            """
+        let none = credits(#"{"amount":0,"currency":"USD","amount_without_scoped_credits":0,"tranches":[],"promo_tranches":[]}"#)
+        let maxCredits = credits(maxJSON)
+        let bought = credits(#"{"amount":2500,"currency":"USD","amount_without_scoped_credits":2500,"tranches":[],"promo_tranches":[]}"#)
+        let mixed = credits(#"{"amount":7320,"currency":"USD","amount_without_scoped_credits":1200,"promo_tranches":[{"remaining_amount_minor_units":6120,"granted_amount_minor_units":10000,"expires_at":"2026-12-12T00:00:00Z","program_id":"subscription_api_credit"}]}"#)
+        check("credit fixtures decode", none != nil && maxCredits != nil && bought != nil && mixed != nil)
+        check("credits that aren't the Console's shape don't decode", credits(#"{"error":"not found"}"#) == nil && credits("<html>") == nil)
+        func record(_ b: CreditBalance?, _ problem: CreditsProblem? = nil) -> CreditsRecord {
+            CreditsRecord(balance: b, problem: problem, triedAt: creditsNow)
+        }
+        func shown(_ r: CreditsRecord?, on: Bool = true, at now: Date? = nil) -> CreditsLine? {
+            Credits.line(r, enabled: on, now: now ?? creditsNow)
+        }
+        check("Pro, no credits: nothing shown", shown(record(none)) == nil)
+        check("Max in its first 7 days (a zero balance): nothing shown", shown(record(none)) == nil && shown(nil) == nil)
+        let maxLine = shown(record(maxCredits))
+        check("Max with credits: shows what's left", maxLine?.amount == "$100.00 left")
+        check("Max credits say they're monthly and when they expire", maxLine?.details == ["$100.00 monthly credit, expires Dec 12"])
+        check("the setting turns it off", shown(record(maxCredits), on: false) == nil)
+        check("bought credits show as bought", shown(record(bought))?.details == ["$25.00 bought"] && shown(record(bought))?.amount == "$25.00 left")
+        check("monthly and bought told apart", shown(record(mixed))?.details == ["$61.20 monthly credit, expires Dec 12", "$12.00 bought"])
+        check("monthly credits past their expiry are gone", shown(record(maxCredits), at: parseISO("2026-12-12T00:00:01Z")!) == nil
+              && shown(record(mixed), at: parseISO("2026-12-13T00:00:00Z")!)?.amount == "$12.00 left")
+        check("a current reading has no warning", maxLine?.warning == nil)
+        check("couldn't check says so, with the last balance",
+              shown(record(maxCredits, .failed), at: creditsNow.addingTimeInterval(7200))?.warning == "Couldn't check · 2 h ago"
+              && shown(record(maxCredits, .failed))?.amount == "$100.00 left")
+        check("an expired sign-in says to sign in again", shown(record(maxCredits, .signedOut))?.warning?.contains("sign in again") == true)
+        check("a problem with no credits still shows nothing", shown(record(none, .failed)) == nil)
+        check("Settings says when there are none yet",
+              Credits.status(record(none), signedIn: true, checking: false, now: creditsNow).hasPrefix("No API credits yet"))
+        check("Settings says when it's not signed in", Credits.status(nil, signedIn: false, checking: false) == "Not signed in to the Console")
+        let consoleOrgs = ConsoleOrgs.parse(Data("""
+            [{"uuid":"0abcb734-0000-4000-8000-000000000001","capabilities":["chat","claude_max"]},
+             {"uuid":"920B389C-0000-4000-8000-000000000002","capabilities":["api","api_individual"]},
+             {"uuid":"../../evil","capabilities":["api"]}]
+            """.utf8))
+        check("the Console's API organization is found", consoleOrgs?.api == ["920b389c-0000-4000-8000-000000000002"])
+        check("only real organization ids are used", consoleOrgs?.all.count == 2)
+        check("the Console signed in as this account is accepted", consoleOrgs?.matches("0ABCB734-0000-4000-8000-000000000001") == true)
+        check("the Console signed in as another account is refused", consoleOrgs?.matches("27fb77c0-0000-4000-8000-000000000003") == false)
+        let roundTrip = CreditsMonitor.encode(["a@example.com": record(mixed, .failed)]).flatMap(CreditsMonitor.decode)
+        check("credit records survive a relaunch", roundTrip?["a@example.com"] == record(mixed, .failed))
 
         // Secrets
         let masked = CLI.Result(ok: false, out: Data("bad token sk-ant-oat01-abc_DEF-123 rejected".utf8)).text
