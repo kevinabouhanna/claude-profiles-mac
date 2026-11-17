@@ -23,7 +23,7 @@ enum UsageColors {
         let s = highContrast ? (isDark ? darkHigh : lightHigh) : (isDark ? dark : light)
         switch severity {
         case .fine: return s.fine
-        case .overPace: return s.warning
+        case .warning: return s.warning
         case .critical: return s.critical
         }
     }
@@ -35,7 +35,7 @@ enum Palette {
     static let track = Color.primary.opacity(0.14)
     // The menu bar's colours (#63): darker in light mode, where the dark mode ones are too pale.
     static let green = adaptive(.fine)
-    static let orange = adaptive(.overPace)
+    static let orange = adaptive(.warning)
     static let red = adaptive(.critical)
     /// The selected tab: white on light glass, a lighter grey on dark.
     static let selectedTab = Color(nsColor: NSColor(name: nil) { appearance in
@@ -54,7 +54,7 @@ enum Palette {
     static func tint(_ s: Window.Severity) -> Color {
         switch s {
         case .fine: return green
-        case .overPace: return orange
+        case .warning: return orange
         case .critical: return red
         }
     }

@@ -760,7 +760,7 @@ enum Debug {
         let image = MenuBarImage.render(account, s, dark: true, template: false)
         check("stacked fits the bar", image.size.height <= 22 && image.size.width > 0)
         // #63: readable on the darkest light bar and the lightest dark bar macOS shows.
-        let severities: [Window.Severity] = [.fine, .overPace, .critical]
+        let severities: [Window.Severity] = [.fine, .warning, .critical]
         func readable(dark: Bool, high: Bool, on bar: String, at least: Double) -> Bool {
             severities.allSatisfy { contrastRatio(UsageColors.color($0, dark: dark, highContrast: high), nsColor(hex: bar)) >= least }
         }
@@ -794,6 +794,32 @@ enum Debug {
         check("passed 5h window reads 0", passed.pct == 0 && passed.resetsAt == nil)
         let week = Window(raw: raw(50, resetIn: -60), period: weekPeriod, fetchedAt: now, now: now)
         check("passed weekly window rolls forward", week.pct == 0 && (week.resetsAt ?? now) > now)
+
+        // #20: colours say how close you are to running out. `gone` is the share of the window passed.
+        func session(_ pct: Double, gone: Double) -> Window {
+            Window(raw: raw(pct, resetIn: (1 - gone) * fiveHourPeriod), period: fiveHourPeriod, fetchedAt: now, now: now)
+        }
+        func weekly(_ pct: Double, gone: Double) -> Window {
+            Window(raw: raw(pct, resetIn: (1 - gone) * weekPeriod), period: weekPeriod, fetchedAt: now, now: now)
+        }
+        check("session 48% is orange, however fast", session(48, gone: 0.31).severity == .warning)
+        check("session 39% is green, however fast", session(39, gone: 0.05).severity == .fine)
+        check("session 80% is red, even under pace", session(80, gone: 0.9).severity == .critical)
+        check("weekly on track to last is green", weekly(71, gone: 0.74).severity == .fine)
+        check("weekly out a few hours early is orange", weekly(82, gone: 0.78).severity == .warning)
+        check("weekly out days early is red", weekly(50, gone: 0.3).severity == .critical)
+        check("weekly 90% is red", weekly(90, gone: 0.95).severity == .critical)
+        let dayOne = weekly(6, gone: 0.04)
+        check("weekly 6% on day one is green, with no sentence", dayOne.severity == .fine && dayOne.forecast == nil)
+        check("on pace says it lasts about until the reset",
+              session(20, gone: 0.199).forecast == "On pace · runs out about when it resets")
+        check("weekly 85% in the first hours is red", weekly(85, gone: 0.036).severity == .critical)
+        let nearlyOnPace = weekly(10, gone: 0.0955)  // runs out ~7.5 h (4.5%) early
+        check("a week running out hours early says when, in orange",
+              nearlyOnPace.severity == .warning && nearlyOnPace.forecast?.contains("runs out about") == false)
+        let onPace = weekly(50.01, gone: 0.5)  // runs out seconds early
+        check("a week on pace stays green", onPace.severity == .fine && onPace.forecast?.contains("about when it resets") == true)
+        check("a week out exactly a day early is red", Window.weeklySeverity(50, early: 86400) == .critical)
 
         // A passing token expiry keeps the last reading
         func row(_ json: String) -> Account? { try? JSONDecoder().decode(Account.self, from: Data(json.utf8)) }
