@@ -290,7 +290,7 @@ struct Window {
         let from = measuredAt - lookback(period)
         let rate: Double
         if from <= start {
-            rate = measured / max(1, measuredAt.timeIntervalSince(start))  // the window is younger
+            return nil  // the window is younger than the lookback: its straight line is its pace
         } else if let then = readings.last(where: { $0.at <= from }) {
             // Over the time since that reading, which is longer than the lookback when the app
             // wasn't running in between (code review of #72): its use is spread over all of it.
@@ -361,7 +361,7 @@ struct Window {
                     text = "\(lead) · not used for \(idleText(measuredAt.timeIntervalSince(since)))"
                 case .rate(let r)?:
                     rate = r
-                    straightLine = measuredAt - Self.lookback(period) <= start  // a window younger than that
+                    straightLine = false
                 case nil:
                     rate = measured / max(1, measuredAt.timeIntervalSince(start))
                 }
@@ -369,16 +369,16 @@ struct Window {
                     text = "Limit reached"
                 } else if rate > 0 {
                     let projected = measured + rate * reset.timeIntervalSince(measuredAt)
-                    if projected >= 100 && straightLine && delta.rounded() < Self.nearPace {
-                        // #73: a straight line turns a small lead into a run-out a day early.
-                        text = gap < 1 ? "On pace · runs out about when it resets" : "\(lead) · close to an even pace"
-                    } else if projected >= 100 {
+                    if projected >= 100 {
                         let out = measuredAt + (100 - measured) / rate
                         let before = reset.timeIntervalSince(out)
                         if out <= now {
                             // Worked out from an earlier reading, its run-out time has passed.
                             text = "May have run out by now"
                             early = before
+                        } else if straightLine && delta.rounded() < Self.nearPace {
+                            // #73: a straight line turns a small lead into a run-out a day early.
+                            text = gap < 1 ? "On pace · runs out about when it resets" : "\(lead) · close to an even pace"
                         } else if before < period * Self.closeToReset {
                             // A time minutes before the reset would read as a warning.
                             text = "\(lead) · runs out about when it resets"

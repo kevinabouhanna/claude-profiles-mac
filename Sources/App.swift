@@ -926,6 +926,9 @@ enum Debug {
         // 95% at half the window runs out 8 minutes after the reading: 9 minutes on, it has passed.
         let recent = reading(95, gone: 0.5, age: 540)
         check("a recent reading's passed run-out says so too", !recent.isOld && recent.forecast == "May have run out by now")
+        // Code review of #74: close to an even pace doesn't hide a run-out time that has passed.
+        check("a passed run-out says so even close to an even pace",
+              reading(54, gone: 0.5, age: 2.2 * 3600).forecast == "May have run out by now")
         check("a fresh forecast still gives the time", reading(age: 60).forecast?.contains("% over pace · runs out ") == true)
         func weekRow(fetchedAgo: TimeInterval) -> Account? {
             let f = ISO8601DateFormatter()
