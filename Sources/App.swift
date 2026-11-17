@@ -742,6 +742,21 @@ enum Debug {
         s = TitleStyle(); s.layout = .stacked
         let image = MenuBarImage.render(account, s, dark: true, template: false)
         check("stacked fits the bar", image.size.height <= 22 && image.size.width > 0)
+        let severities: [Window.Severity] = [.fine, .overPace, .critical]
+        check("usage colours readable on a light bar", severities.allSatisfy {
+            contrastRatio(UsageColors.color($0, dark: false), nsColor(hex: "#F5F5F5")) >= 4.5
+        })
+        check("usage colours readable on a dark bar", severities.allSatisfy {
+            contrastRatio(UsageColors.color($0, dark: true), nsColor(hex: "#1E1E1E")) >= 4.5
+        })
+        check("the dropdown uses the menu bar's colours", severities.allSatisfy { s in
+            [false, true].allSatisfy { dark in
+                let appearance = NSAppearance(named: dark ? .darkAqua : .aqua) ?? NSAppearance.currentDrawing()
+                var shown = NSColor.clear
+                appearance.performAsCurrentDrawingAppearance { shown = Palette.adaptiveNS(s).usingColorSpace(.sRGB) ?? .clear }
+                return hexString(shown) == hexString(UsageColors.color(s, dark: dark))
+            }
+        })
 
         // Pace
         let now = Date()

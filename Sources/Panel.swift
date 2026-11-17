@@ -6,22 +6,24 @@ enum Palette {
     static let card = Color.primary.opacity(0.055)
     static let cardLine = Color.primary.opacity(0.08)
     static let track = Color.primary.opacity(0.14)
-    // Darker in light mode: the dark mode values are too pale to read on light glass.
-    static let green = adaptive(dark: (0.25, 0.78, 0.42), light: (0.09, 0.50, 0.22))
-    static let orange = adaptive(dark: (0.96, 0.62, 0.22), light: (0.72, 0.38, 0.02))
-    static let red = adaptive(dark: (0.94, 0.33, 0.31), light: (0.76, 0.15, 0.14))
+    // The menu bar's colours (#63): darker in light mode, where the dark mode ones are too pale.
+    static let green = adaptive(.fine)
+    static let orange = adaptive(.overPace)
+    static let red = adaptive(.critical)
     /// The selected tab: white on light glass, a lighter grey on dark.
     static let selectedTab = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             ? NSColor(white: 1, alpha: 0.17) : NSColor(white: 1, alpha: 1)
     })
 
-    private static func adaptive(dark: (CGFloat, CGFloat, CGFloat), light: (CGFloat, CGFloat, CGFloat)) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            let c = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
-            return NSColor(srgbRed: c.0, green: c.1, blue: c.2, alpha: 1)
-        })
+    /// Also what the self-test reads, to check the dropdown and the menu bar agree.
+    static func adaptiveNS(_ severity: Window.Severity) -> NSColor {
+        NSColor(name: nil) { appearance in
+            UsageColors.color(severity, dark: appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
+        }
     }
+
+    private static func adaptive(_ severity: Window.Severity) -> Color { Color(nsColor: adaptiveNS(severity)) }
 
     static func tint(_ s: Window.Severity) -> Color {
         switch s {

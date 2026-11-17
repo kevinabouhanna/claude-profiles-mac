@@ -9,11 +9,14 @@ forecast tell you something true about your usage.
   cswap refused because Home Control's assistant ran Claude on Personal's own sign-in, and the
   refresh cleared the message. The app now stops such background helpers and switches, and
   says plainly why when it still can't.
-- #34 **An inaccurate reading** (a bug): the app showed usage that didn't match Claude's own.
-  Start from the app's logs and claude-swap's output for that account.
-- #20 **Pace colours by how much is used**: green, orange and red follow the share of the limit
-  used (48% is orange, 80–90% red), not how far over pace a short session is; the weekly limit
-  may keep pace.
+- #63 **Menu bar colours readable on a light menu bar**: the menu bar's usage colours come
+  from the dropdown's palette, a darker shade on a light bar, every one at least 4.5:1 contrast.
+- #20 **Usage colours by how close you are to running out**: the 5-hour session is green under
+  40%, orange to 79%, red from 80%; a weekly limit is orange when it won't last until its reset,
+  red a day or more early, and never coloured before its forecast shows.
+- #34 **Say when a reading is old** (a bug): Claude's server paused cswap's usage checks for an
+  hour and the app showed the last reading as current. A reading over 10 minutes old now dims in
+  the menu bar and the dropdown says when it last checked.
 - #30 **A forecast that means something**: "runs out tomorrow" only from the pace you're
   actually using it at, nothing for an account you haven't used in days; or no forecast, only
   over or under pace.

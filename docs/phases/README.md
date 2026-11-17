@@ -7,16 +7,16 @@ Each phase is a milestone on GitHub and a page here; each plan is an issue, in t
 
 | Order | Plan | Phase |
 |---|---|---|
-| 0 | #61 Switch to Personal works while Home Control runs Claude on Personal | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
-| 1 | #34 bug: innacurate reading | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
-| 2 | #20 usage pace coloring logic | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
-| 3 | #30 prediction logic | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
+| 1 | #63 Menu bar colours readable on a light menu bar | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
+| 2 | #20 Usage colours by how close you are to running out | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
+| 3 | #34 Say when a reading is old (87% shown while Claude said 99%) | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
+| 4 | #30 prediction logic | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
 
 ## Next
 
 | Order | Plan | Phase |
 |---|---|---|
-| 4 | #31 Show the API credits left, only when there are some | [Phase 3: API credits](03-api-credits.md) |
+| 5 | #31 Show the API credits left, only when there are some | [Phase 3: API credits](03-api-credits.md) |
 
 ## Later
 
