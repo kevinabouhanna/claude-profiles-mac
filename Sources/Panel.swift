@@ -120,6 +120,12 @@ struct UsageCard: View {
                 Text(window.resetsAt.map { "Resets \(formatWhen($0))" } ?? "Starts when you next use Claude")
                     .font(.system(size: 11))
                     .foregroundColor(.primary.opacity(0.5))
+                if let checked = window.checkedAt {
+                    // #34: say the number may be behind, rather than show it as current.
+                    Text("Last checked \(formatWhen(checked)) · \(ageText(since: checked))")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Palette.orange)
+                }
             }
         }
         .padding(12)

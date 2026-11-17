@@ -142,6 +142,8 @@ enum MenuBarImage {
         let value: String
         let role: Role
         let severity: Window.Severity
+        /// Drawn dimmed: the reading is old (#34).
+        let old: Bool
     }
 
     private static func segments(_ account: Account?, _ style: TitleStyle) -> [Segment] {
@@ -151,7 +153,10 @@ enum MenuBarImage {
                 let n = style.showRemaining ? max(0, 100 - window.display) : window.display
                 value = String(n) + (style.showPercent ? "%" : "")
             }
-            return Segment(label: label, value: value, role: role, severity: window?.severity ?? .fine)
+            return Segment(
+                label: label, value: value, role: role,
+                severity: window?.severity ?? .fine, old: window?.isOld ?? false
+            )
         }
         var out: [Segment] = []
         let session = make("5h", account?.session, .session)
@@ -169,6 +174,17 @@ enum MenuBarImage {
             }
         }
         return out
+    }
+
+    /// Everything about the numbers' look beyond their text: each one's colour and whether it's
+    /// dimmed. Part of the status item's redraw key, so a reading turning old redraws once.
+    static func lookKey(_ account: Account?, _ style: TitleStyle) -> String {
+        segments(account, style).map { "\($0.severity)\($0.old ? "-old" : "")" }.joined(separator: ",")
+    }
+
+    /// Whether any number shown is from an old reading.
+    static func showsOld(_ account: Account?, _ style: TitleStyle) -> Bool {
+        segments(account, style).contains { $0.old }
     }
 
     private static func shortName(_ account: Account?) -> String? {
@@ -211,11 +227,13 @@ enum MenuBarImage {
         let secondary = primary.withAlphaComponent(0.55)
 
         func color(_ s: Segment) -> NSColor {
-            guard !template else { return primary }
+            // An old reading's number is dimmed (#34), in a template too (macOS keeps its alpha).
+            let dim: (NSColor) -> NSColor = { s.old ? $0.withAlphaComponent(0.45) : $0 }
+            guard !template else { return dim(primary) }
             switch style.colorMode {
-            case .system: return primary
-            case .custom: return nsColor(hex: style.customHex(session: s.role == .session, dark: dark))
-            case .usage: return UsageColors.color(s.severity, dark: dark, highContrast: UsageColors.increaseContrast)
+            case .system: return dim(primary)
+            case .custom: return dim(nsColor(hex: style.customHex(session: s.role == .session, dark: dark)))
+            case .usage: return dim(UsageColors.color(s.severity, dark: dark, highContrast: UsageColors.increaseContrast))
             }
         }
         func text(_ string: String, _ c: NSColor) -> NSAttributedString {

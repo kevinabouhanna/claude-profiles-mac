@@ -108,6 +108,13 @@ func ageText(since date: Date, now: Date = clock()) -> String {
     return "\(minutes / 60) h ago"
 }
 
+/// How old a reading may get before the app says so (#34): 10 minutes, or two refreshes if
+/// that's longer. cswap can keep handing over its last reading for an hour when Claude's
+/// server asks it to wait; a normal reading is never older than a refresh or so.
+func staleLimit(refresh: Int = UserDefaults.standard.integer(forKey: "refreshInterval")) -> TimeInterval {
+    max(600, 2 * TimeInterval(refresh > 0 ? refresh : 60))
+}
+
 /// Account order is cswap's slot numbers: rotation and `cswap list` go by them.
 enum SlotOrder {
     /// The `cswap move <slot> <target>` steps that put the accounts now in `slots`
@@ -225,6 +232,9 @@ struct Window {
     let forecast: String?
     /// How close you are to running out (#20): the colour of the number, the bar and the sentence.
     let severity: Severity
+    /// When the reading was taken, if that's longer ago than `staleLimit` (#34); nil while fresh.
+    let checkedAt: Date?
+    var isOld: Bool { checkedAt != nil }
 
     enum Severity { case fine, warning, critical }
 
@@ -248,7 +258,10 @@ struct Window {
         return early >= 86400 ? .critical : .warning
     }
 
-    init(raw: RawWindow?, period: TimeInterval, fetchedAt: Date?, now: Date = clock()) {
+    init(
+        raw: RawWindow?, period: TimeInterval, fetchedAt: Date?, now: Date = clock(),
+        staleAfter: TimeInterval = staleLimit()
+    ) {
         var measured = raw?.pct ?? 0
         var reset = raw?.resetsAt.flatMap(parseISO)
         var measuredAt = fetchedAt ?? now
@@ -270,6 +283,9 @@ struct Window {
 
         pct = measured
         resetsAt = reset
+        // A reset that has passed since makes the reading's 0 certain, so it isn't old.
+        let old = now.timeIntervalSince(measuredAt) > staleAfter
+        checkedAt = old ? measuredAt : nil
         var pace: Double?
         var text: String?
         var hasForecast = false
@@ -293,6 +309,10 @@ struct Window {
                     let lead = gap >= 1 ? "\(gap)% over pace" : "On pace"
                     if measured >= 100 {
                         text = "Limit reached"
+                    } else if old && out <= now {
+                        // Worked out from an old reading, its run-out time has passed.
+                        text = "May have run out by now"
+                        early = before
                     } else if before < period * Self.closeToReset {
                         // A time minutes before the reset would read as a warning.
                         text = "\(lead) · runs out about when it resets"
