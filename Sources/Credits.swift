@@ -478,6 +478,10 @@ final class ConsoleSignInWindow: NSObject, WKNavigationDelegate, WKUIDelegate, N
     private let web: WKWebView
     private var popups: [NSWindow] = []
     private var done = false
+    /// The Console's email-code sign-in finishes without loading a new page, so while the
+    /// window is open it also asks every few seconds. Only while it's open (rule 6 is for
+    /// the background; this is a person signing in).
+    private var poll: Timer?
 
     static func show(for account: Account, store: UUID) {
         if let existing = open[account.nicknameKey] {
@@ -533,6 +537,11 @@ final class ConsoleSignInWindow: NSObject, WKNavigationDelegate, WKUIDelegate, N
         web.navigationDelegate = self
         web.uiDelegate = self
         if let url = URL(string: Credits.console + "/settings/billing") { web.load(URLRequest(url: url)) }
+        let t = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkSignedIn() }
+        }
+        t.tolerance = 1  // rule 4
+        poll = t
     }
 
     /// Signed in once the Console's own list of organizations answers.
@@ -545,6 +554,7 @@ final class ConsoleSignInWindow: NSObject, WKNavigationDelegate, WKUIDelegate, N
             )
             guard !done, (answer as? NSNumber)?.intValue == 200 else { return }
             done = true
+            poll?.invalidate()
             CreditsMonitor.shared.signedIn(account, store: store)
             window.close()
         }
@@ -588,6 +598,8 @@ final class ConsoleSignInWindow: NSObject, WKNavigationDelegate, WKUIDelegate, N
         web.navigationDelegate = nil
         web.uiDelegate = nil
         if !done { CreditsMonitor.shared.discard(store) }
+        poll?.invalidate()
+        poll = nil
         Self.open[account.nicknameKey] = nil
     }
 }
