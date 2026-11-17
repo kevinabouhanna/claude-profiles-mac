@@ -820,7 +820,10 @@ enum Debug {
         check("weekly on track to last is green", weekly(71, gone: 0.74).severity == .fine)
         check("weekly out a few hours early is orange", weekly(75, gone: 0.7).severity == .warning)
         // #70: 9% with 7% gone runs out ~2 days early, but it's barely over pace: orange.
-        check("weekly out days early is orange, not red", weekly(9, gone: 0.07).severity == .warning)
+        let barelyOver = weekly(9, gone: 0.07)
+        check("weekly barely over pace is orange, not red",
+              barelyOver.severity == .warning && barelyOver.forecast?.contains("runs out") == true)
+        check("weekly far over pace is red", weekly(70, gone: 0.43).severity == .critical)
         check("weekly 80% is red", weekly(80, gone: 0.95).severity == .critical)
         let dayOne = weekly(6, gone: 0.04)
         check("weekly 6% on day one is green, with no sentence", dayOne.severity == .fine && dayOne.forecast == nil)
@@ -832,8 +835,7 @@ enum Debug {
               nearlyOnPace.severity == .warning && nearlyOnPace.forecast?.contains("runs out about") == false)
         let onPace = weekly(50.01, gone: 0.5)  // runs out seconds early
         check("a week on pace stays green", onPace.severity == .fine && onPace.forecast?.contains("about when it resets") == true)
-        check("red only from 80% used", Window.forecastSeverity(79, early: 3 * 86400) == .warning
-              && Window.forecastSeverity(80, early: nil) == .critical)
+        check("79% a little over pace is orange", weekly(79, gone: 0.7).severity == .warning)
 
         // #34: an old reading says so. The 13 Nov case: 87% at 42% of the window, read at 10:37.
         func reading(_ pct: Double = 87, gone: Double = 0.42, age: TimeInterval) -> Window {

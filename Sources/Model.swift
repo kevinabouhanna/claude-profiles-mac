@@ -248,13 +248,19 @@ struct Window {
         used >= criticalAt ? .critical : (used >= warningAt ? .warning : .fine)
     }
 
+    /// A week this many points over pace, and running out before its reset, is red (#70):
+    /// clearly in trouble, not a forecast run long from a small lead.
+    static let weeklyFarOverPace = 15.0
+
     /// A session or a week with a forecast (#68, #70): orange only when it runs out before its
-    /// reset, so 44% on track for 64% is green; red only from 80% used, whatever the pace, so
-    /// a week barely over pace on day two is orange, not red. `early` is how long before the
-    /// reset it runs out; nil when it lasts.
-    static func forecastSeverity(_ used: Double, early: TimeInterval?) -> Severity {
+    /// reset, so 44% on track for 64% is green. Red from 80% used, whatever the pace, as the
+    /// limit is close; and a week far over pace (27 points), but not one barely over (2 points
+    /// on day two, whose straight line also runs out days early). `early` is how long before
+    /// the reset it runs out; nil when it lasts. `overPace`: points ahead of an even pace.
+    static func forecastSeverity(_ used: Double, early: TimeInterval?, overPace: Double, week: Bool) -> Severity {
         if used >= criticalAt { return .critical }
-        return early == nil ? .fine : .warning
+        guard early != nil else { return .fine }
+        return week && overPace >= weeklyFarOverPace ? .critical : .warning
     }
 
     init(
@@ -289,12 +295,13 @@ struct Window {
         var text: String?
         var hasForecast = false
         var early: TimeInterval?
+        var delta = 0.0
 
         if let reset {
             let start = reset - period
             let fraction = min(1, max(0, measuredAt.timeIntervalSince(start) / period))
             pace = fraction * 100
-            let delta = measured - fraction * 100
+            delta = measured - fraction * 100
             if measured == 0 {
                 text = "Nothing used yet"
                 hasForecast = true
@@ -327,8 +334,10 @@ struct Window {
         }
         pacePct = pace
         forecast = text
-        // The colour never says something the sentence under the bar doesn't.
-        severity = hasForecast ? Self.forecastSeverity(measured, early: early) : Self.levelSeverity(measured)
+        // Orange always matches a "runs out" sentence; red adds "nearly at the limit" (80%).
+        severity = hasForecast
+            ? Self.forecastSeverity(measured, early: early, overPace: delta, week: period == weekPeriod)
+            : Self.levelSeverity(measured)
     }
 
     var display: Int { Int(pct.rounded()) }
