@@ -806,13 +806,20 @@ enum Debug {
         check("session 39% is green, however fast", session(39, gone: 0.05).severity == .fine)
         check("session 80% is red, even under pace", session(80, gone: 0.9).severity == .critical)
         check("weekly on track to last is green", weekly(71, gone: 0.74).severity == .fine)
-        check("weekly out a few hours early is orange", weekly(80, gone: 0.78).severity == .warning)
+        check("weekly out a few hours early is orange", weekly(82, gone: 0.78).severity == .warning)
         check("weekly out days early is red", weekly(50, gone: 0.3).severity == .critical)
         check("weekly 90% is red", weekly(90, gone: 0.95).severity == .critical)
         let dayOne = weekly(6, gone: 0.04)
         check("weekly 6% on day one is green, with no sentence", dayOne.severity == .fine && dayOne.forecast == nil)
         check("on pace says it lasts about until the reset",
               session(20, gone: 0.199).forecast == "On pace · runs out about when it resets")
+        check("weekly 85% in the first hours is red", weekly(85, gone: 0.036).severity == .critical)
+        let nearlyOnPace = weekly(10, gone: 0.0955)  // runs out ~7.5 h (4.5%) early
+        check("a week running out hours early says when, in orange",
+              nearlyOnPace.severity == .warning && nearlyOnPace.forecast?.contains("runs out about") == false)
+        let onPace = weekly(50.01, gone: 0.5)  // runs out seconds early
+        check("a week on pace stays green", onPace.severity == .fine && onPace.forecast?.contains("about when it resets") == true)
+        check("a week out exactly a day early is red", Window.weeklySeverity(50, early: 86400) == .critical)
 
         // A passing token expiry keeps the last reading
         func row(_ json: String) -> Account? { try? JSONDecoder().decode(Account.self, from: Data(json.utf8)) }

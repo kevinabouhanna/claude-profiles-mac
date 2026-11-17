@@ -228,19 +228,24 @@ struct Window {
 
     enum Severity { case fine, warning, critical }
 
-    /// The 5-hour session goes by how much is used: Auto-Switch moves you when it's nearly
-    /// full, so that's what the colour warns about, not how fast you got there.
-    static func sessionSeverity(_ used: Double) -> Severity {
-        used >= 80 ? .critical : (used >= 40 ? .warning : .fine)
+    /// The thresholds, which Settings also states (#20).
+    static let warningAt = 40.0, criticalAt = 80.0, weeklyCriticalAt = 90.0
+    /// Running out this close to the reset counts as lasting until it: 3% of the window,
+    /// 9 minutes of a session or 5 hours of a week, so a reading on pace doesn't flicker.
+    static let closeToReset = 0.03
+
+    /// By how much is used: a session always (how close a switch is, not how fast you got
+    /// there), and a week before its forecast shows (85% in the first hours is red, 6% green).
+    static func levelSeverity(_ used: Double) -> Severity {
+        used >= criticalAt ? .critical : (used >= warningAt ? .warning : .fine)
     }
 
-    /// A week goes by whether it lasts until its reset: orange when it runs out before,
-    /// red when a day or more before, or nearly all used. Only once the forecast shows,
-    /// so the colour never says something the sentence under the bar doesn't.
-    static func weeklySeverity(_ used: Double, runsOut: Date?, reset: Date?) -> Severity {
-        if used >= 90 { return .critical }
-        guard let runsOut, let reset, runsOut < reset else { return .fine }
-        return reset.timeIntervalSince(runsOut) > 86400 ? .critical : .warning
+    /// A week with a forecast, by whether it lasts until its reset. `early` is how long
+    /// before the reset it runs out; nil when it lasts. Red a day or more early.
+    static func weeklySeverity(_ used: Double, early: TimeInterval?) -> Severity {
+        if used >= weeklyCriticalAt { return .critical }
+        guard let early else { return .fine }
+        return early >= 86400 ? .critical : .warning
     }
 
     init(raw: RawWindow?, period: TimeInterval, fetchedAt: Date?, now: Date = clock()) {
@@ -265,55 +270,47 @@ struct Window {
 
         pct = measured
         resetsAt = reset
-        let session = period != weekPeriod
-        // runsOut: nil while there's no forecast, or it lasts until the reset.
-        func rate(runsOut: Date?) -> Severity {
-            session ? Self.sessionSeverity(measured) : Self.weeklySeverity(measured, runsOut: runsOut, reset: reset)
-        }
+        var pace: Double?
+        var text: String?
+        var hasForecast = false
+        var early: TimeInterval?
 
-        guard let reset else {
-            pacePct = nil
-            forecast = nil
-            severity = rate(runsOut: nil)
-            return
-        }
-
-        let start = reset - period
-        let fraction = min(1, max(0, measuredAt.timeIntervalSince(start) / period))
-        let pace = fraction * 100
-        pacePct = pace
-        let delta = measured - pace
-
-        // Straight-line projection: wildly noisy in the first moments of a window.
-        guard fraction >= 0.05 else {
-            forecast = measured == 0 ? "Nothing used yet" : nil
-            severity = rate(runsOut: nil)
-            return
-        }
-        if measured == 0 {
-            forecast = "Nothing used yet"
-            severity = rate(runsOut: nil)
-            return
-        }
-        let projected = measured / fraction
-        let gap = Int(abs(delta).rounded())
-        if projected >= 100 {
-            let out = start + period * fraction * (100 / measured)
-            severity = rate(runsOut: out)
-            if measured >= 100 {
-                forecast = "Limit reached"
-            } else if gap < 1 {
-                // Runs out within moments of the reset: a time a few minutes before it reads
-                // like a warning that "On pace" contradicts.
-                forecast = "On pace · runs out about when it resets"
-            } else {
-                forecast = "\(gap)% over pace · runs out \(formatWhen(out))"
+        if let reset {
+            let start = reset - period
+            let fraction = min(1, max(0, measuredAt.timeIntervalSince(start) / period))
+            pace = fraction * 100
+            let delta = measured - fraction * 100
+            if measured == 0 {
+                text = "Nothing used yet"
+                hasForecast = true
+            } else if fraction >= 0.05 {  // straight-line projection: wildly noisy before this
+                hasForecast = true
+                let projected = measured / fraction
+                let gap = Int(abs(delta).rounded())
+                if projected >= 100 {
+                    let out = start + period * fraction * (100 / measured)
+                    let before = reset.timeIntervalSince(out)
+                    let lead = gap >= 1 ? "\(gap)% over pace" : "On pace"
+                    if measured >= 100 {
+                        text = "Limit reached"
+                    } else if before < period * Self.closeToReset {
+                        // A time minutes before the reset would read as a warning.
+                        text = "\(lead) · runs out about when it resets"
+                    } else {
+                        text = "\(lead) · runs out \(formatWhen(out))"
+                        early = before
+                    }
+                } else {
+                    let lead = gap >= 1 ? "\(gap)% under pace" : "On pace"
+                    text = "\(lead) · on track for \(Int(projected.rounded()))%"
+                }
             }
-        } else {
-            severity = rate(runsOut: nil)
-            let lead = gap >= 1 ? "\(gap)% under pace" : "On pace"
-            forecast = "\(lead) · on track for \(Int(projected.rounded()))%"
         }
+        pacePct = pace
+        forecast = text
+        // The colour never says something the sentence under the bar doesn't.
+        severity = period == weekPeriod && hasForecast
+            ? Self.weeklySeverity(measured, early: early) : Self.levelSeverity(measured)
     }
 
     var display: Int { Int(pct.rounded()) }
