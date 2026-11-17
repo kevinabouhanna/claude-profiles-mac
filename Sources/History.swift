@@ -33,11 +33,12 @@ final class UsageHistory {
         }
     }
 
-    /// The window names readings are kept under: "5h", "7d" and "model:<name>".
-    static func name(model: String?) -> String { "model:\(model ?? "")" }
+    /// The window names readings are kept under: "5h", "7d" and "model:<name>". A model limit
+    /// without a name has none, so two of them can't mix their readings.
+    static func name(model: String?) -> String? { model.map { "model:\($0)" } }
 
-    func readings(_ account: Account, _ window: String) -> [Reading] {
-        all["\(account.nicknameKey)|\(window)"] ?? []
+    func readings(_ account: Account, _ window: String?) -> [Reading] {
+        window.flatMap { all["\(account.nicknameKey)|\($0)"] } ?? []
     }
 
     /// Adds every account's new readings after a refresh, and saves only when one changed:
@@ -50,7 +51,9 @@ final class UsageHistory {
             var windows: [(String, RawWindow, TimeInterval)] = []
             if let w = usage.fiveHour { windows.append(("5h", w, fiveHourPeriod)) }
             if let w = usage.sevenDay { windows.append(("7d", w, weekPeriod)) }
-            for w in usage.scoped ?? [] { windows.append((Self.name(model: w.name), w, weekPeriod)) }
+            for w in usage.scoped ?? [] {
+                if let name = Self.name(model: w.name) { windows.append((name, w, weekPeriod)) }
+            }
             for (name, raw, period) in windows {
                 let key = "\(account.nicknameKey)|\(name)"
                 let before = all[key] ?? []
@@ -81,7 +84,9 @@ final class UsageHistory {
         var list = list.filter { $0.at >= reset - period }
         if let last = list.last {
             if reading.at <= last.at || reading.pct == last.pct { return list }
-            if reading.pct < last.pct { list = [] }  // a reset cswap's time didn't show
+            // Usage only goes up within a window: a lower figure corrects the ones above it
+            // (rounding, or a reset cswap's time didn't show), and keeps the rest.
+            list.removeAll { $0.pct > reading.pct }
         }
         list.append(reading)
         return Array(list.suffix(limit))

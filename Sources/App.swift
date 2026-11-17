@@ -854,7 +854,7 @@ enum Debug {
         check("a week untouched for 3 days isn't orange", untouched.severity == .fine)
         check("an untouched week at 80% is still red", inUse(80, gone: 0.6, seen: [(86400, 80)]).severity == .critical)
         // 50% with 40% gone: the straight line runs out; 10 points in the last day lasts (92%).
-        let slower = inUse(50, gone: 0.4, seen: [(2 * 86400, 35), (30 * 3600, 40), (3600, 50)])
+        let slower = inUse(50, gone: 0.4, seen: [(2 * 86400, 35), (86400 + 600, 40), (3600, 50)])
         check("a week that slowed down is on track at its recent pace",
               slower.forecast == "10% over pace · on track for 92%" && slower.severity == .fine)
         // 50% with 60% gone: the straight line lasts (83%); 25 points in the last day runs out.
@@ -868,6 +868,12 @@ enum Debug {
               inUse(50, gone: 0.4, seen: [(7200, 50)]).forecast == weekly(50, gone: 0.4).forecast)
         check("readings that don't match the reading are ignored",
               inUse(50, gone: 0.4, seen: [(3 * 86400, 45)]).forecast == weekly(50, gone: 0.4).forecast)
+        // Code review of #72: unchanged for 6 h of a week isn't idle yet; and 30 points over the
+        // 3 days the app was closed is 10 a day, not 30.
+        check("a week unchanged for 6 hours isn't idle yet",
+              inUse(50, gone: 0.4, seen: [(6.5 * 3600, 50)]).forecast == weekly(50, gone: 0.4).forecast)
+        check("use while the app was closed is spread over that time",
+              inUse(70, gone: 0.6, seen: [(3 * 86400, 40), (60, 70)]).forecast == "10% over pace · on track for 98%")
 
         // What the app remembers: only changes, only this window's, kept across a relaunch.
         let reset = now + 3 * 86400
@@ -881,7 +887,11 @@ enum Debug {
                                   resetsAt: reset, period: weekPeriod) == [Reading(at: now, pct: 2)])
         check("a session not started keeps nothing",
               UsageHistory.adding(Reading(at: now, pct: 0), to: kept, resetsAt: nil, period: fiveHourPeriod).isEmpty)
-        let suite = "com.kevinabouhanna.ClaudeProfiles.selftest.\(getpid())"
+        check("a lower figure corrects the ones above it, and keeps the rest",
+              UsageHistory.adding(Reading(at: now, pct: 40.5), to: kept + [Reading(at: now - 60, pct: 41)],
+                                  resetsAt: reset, period: weekPeriod) == kept + [Reading(at: now, pct: 40.5)])
+        check("a model limit without a name keeps nothing", UsageHistory.name(model: nil) == nil)
+        let suite = "com.kevinabouhanna.ClaudeProfiles.selftest"
         if let defaults = UserDefaults(suiteName: suite) {
             let f = ISO8601DateFormatter()
             let json = #"{"number":3,"email":"h@example.com","usageStatus":"ok","usage":{"sevenDay":{"pct":33,"resetsAt":"\#(f.string(from: reset))"}},"usageFetchedAt":"\#(f.string(from: now))"}"#

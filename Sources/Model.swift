@@ -289,14 +289,17 @@ struct Window {
         if from <= start {
             rate = measured / max(1, measuredAt.timeIntervalSince(start))  // the window is younger
         } else if let then = readings.last(where: { $0.at <= from }) {
-            rate = (measured - then.pct) / lookback(period)
+            // Over the time since that reading, which is longer than the lookback when the app
+            // wasn't running in between (code review of #72): its use is spread over all of it.
+            rate = (measured - then.pct) / measuredAt.timeIntervalSince(then.at)
         } else if let first = readings.first, measuredAt.timeIntervalSince(first.at) >= lookback(period) / 4 {
             // Remembered for less than the lookback (the app is new here): what there is.
             rate = (measured - first.pct) / measuredAt.timeIntervalSince(first.at)
         } else {
             return nil
         }
-        return rate > 0 ? .rate(rate) : .idle(since: last.at)
+        // Unchanged for less than `idleAfter` isn't idle yet (code review of #72): the straight line.
+        return rate > 0 ? .rate(rate) : nil
     }
 
     init(
