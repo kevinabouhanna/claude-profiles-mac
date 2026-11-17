@@ -22,9 +22,11 @@ forecast tell you something true about your usage.
   is orange, not red; red from 80% used, or 15 points or more over pace. The rules now: orange
   when a session or week won't last until its reset, red from 80% used (and for a week far over
   pace); in a window's first 5%, by amount (orange from 40%).
-- #30 **A forecast that means something**: "runs out tomorrow" only from the pace you're
-  actually using it at, nothing for an account you haven't used in days; or no forecast, only
-  over or under pace.
+- #30 **A forecast from how you're using it now, nothing for an idle account**: the app
+  remembers each account's readings (only when they change), so "runs out" follows the last
+  day's pace for a week and the last hour's for a session. An account unchanged for 12 hours
+  (30 minutes for a session) says "not used for 3 days" instead of a run-out time, and isn't
+  orange. Before enough is remembered, the straight line from the window's start, as before.
 - #48 **Keep the tooling and the plan in order**, a standing item: product-kit's tools kept
   current (each update is a step of it), local CI, and the board and these pages saying the
   same, which the plan itself (#35) started on 13 Nov.

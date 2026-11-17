@@ -169,6 +169,8 @@ final class Store: ObservableObject {
                     store.problem = "cswap not found. Install claude-swap first."
                 } else if result.ok && store.load(result.out) {
                     store.problem = nil
+                    // Before the redraw this refresh asks for, so it draws the new forecast.
+                    UsageHistory.shared.record(store.accounts)
                 } else {
                     store.problem = "Couldn't read usage from cswap. Showing the last reading."
                 }

@@ -459,6 +459,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !energyTest { Migration.fromClaudeUsageBar() }  // before anything reads settings
         NSApp.mainMenu = Self.makeMainMenu()
         if !energyTest { AutoSwitcher.shared.cleanUpOrphan() }
+        // The energy test's copy keeps its readings to itself (#30).
+        UsageHistory.shared = UsageHistory(defaults: energyTest ? nil : .standard)
         status = StatusController()
         Store.shared.start()
         if !energyTest { AutoSwitcher.shared.sync() }
@@ -836,6 +838,64 @@ enum Debug {
         let onPace = weekly(50.01, gone: 0.5)  // runs out seconds early
         check("a week on pace stays green", onPace.severity == .fine && onPace.forecast?.contains("about when it resets") == true)
         check("79% a little over pace is orange", weekly(79, gone: 0.7).severity == .warning)
+
+        // #30: the forecast follows how you're using it now. `seen`: each figure and how long ago
+        // the app first saw it.
+        func inUse(_ pct: Double, gone: Double, period: TimeInterval = weekPeriod,
+                  seen: [(ago: TimeInterval, pct: Double)]) -> Window {
+            Window(raw: raw(pct, resetIn: (1 - gone) * period), period: period, fetchedAt: now, now: now,
+                   history: seen.map { Reading(at: now - $0.ago, pct: $0.pct) })
+        }
+        // The screenshot: 70% with 51% of the week gone, the account untouched for 3 days.
+        let untouched = inUse(70, gone: 0.51, seen: [(3 * 86400 + 600, 70)])
+        check("the straight line ran an untouched week out", weekly(70, gone: 0.51).forecast?.contains("runs out") == true)
+        check("a week untouched for 3 days has no run-out time",
+              untouched.forecast == "19% over pace · not used for 3 days")
+        check("a week untouched for 3 days isn't orange", untouched.severity == .fine)
+        check("an untouched week at 80% is still red", inUse(80, gone: 0.6, seen: [(86400, 80)]).severity == .critical)
+        // 50% with 40% gone: the straight line runs out; 10 points in the last day lasts (92%).
+        let slower = inUse(50, gone: 0.4, seen: [(2 * 86400, 35), (30 * 3600, 40), (3600, 50)])
+        check("a week that slowed down is on track at its recent pace",
+              slower.forecast == "10% over pace · on track for 92%" && slower.severity == .fine)
+        // 50% with 60% gone: the straight line lasts (83%); 25 points in the last day runs out.
+        let faster = inUse(50, gone: 0.6, seen: [(30 * 3600, 25), (600, 50)])
+        check("a week that sped up runs out at its recent pace",
+              faster.forecast?.contains("under pace · runs out") == true && faster.severity == .warning)
+        let idleSession = inUse(70, gone: 0.3, period: fiveHourPeriod, seen: [(45 * 60, 70)])
+        check("a session untouched for 40+ minutes has no run-out time",
+              idleSession.forecast == "40% over pace · not used for 45 min" && idleSession.severity == .fine)
+        check("too little remembered keeps the straight line",
+              inUse(50, gone: 0.4, seen: [(7200, 50)]).forecast == weekly(50, gone: 0.4).forecast)
+        check("readings that don't match the reading are ignored",
+              inUse(50, gone: 0.4, seen: [(3 * 86400, 45)]).forecast == weekly(50, gone: 0.4).forecast)
+
+        // What the app remembers: only changes, only this window's, kept across a relaunch.
+        let reset = now + 3 * 86400
+        let kept = [Reading(at: now - 3600, pct: 40)]
+        check("an unchanged reading isn't added",
+              UsageHistory.adding(Reading(at: now, pct: 40), to: kept, resetsAt: reset, period: weekPeriod) == kept)
+        check("a changed reading is added",
+              UsageHistory.adding(Reading(at: now, pct: 41), to: kept, resetsAt: reset, period: weekPeriod).count == 2)
+        check("a reset drops the last window's readings",
+              UsageHistory.adding(Reading(at: now, pct: 2), to: [Reading(at: now - 5 * 86400, pct: 90)],
+                                  resetsAt: reset, period: weekPeriod) == [Reading(at: now, pct: 2)])
+        check("a session not started keeps nothing",
+              UsageHistory.adding(Reading(at: now, pct: 0), to: kept, resetsAt: nil, period: fiveHourPeriod).isEmpty)
+        let suite = "com.kevinabouhanna.ClaudeProfiles.selftest.\(getpid())"
+        if let defaults = UserDefaults(suiteName: suite) {
+            let f = ISO8601DateFormatter()
+            let json = #"{"number":3,"email":"h@example.com","usageStatus":"ok","usage":{"sevenDay":{"pct":33,"resetsAt":"\#(f.string(from: reset))"}},"usageFetchedAt":"\#(f.string(from: now))"}"#
+            if let account = try? JSONDecoder().decode(Account.self, from: Data(json.utf8)) {
+                let first = UsageHistory(defaults: defaults)
+                check("a new reading is saved", first.record([account], now: now))
+                check("the same reading again saves nothing", !first.record([account], now: now))
+                check("readings survive a relaunch",
+                      UsageHistory(defaults: defaults).readings(account, "7d") == [Reading(at: f.date(from: f.string(from: now))!, pct: 33)])
+            } else {
+                check("history fixture decodes", false)
+            }
+            defaults.removePersistentDomain(forName: suite)
+        }
 
         // #34: an old reading says so. The 13 Nov case: 87% at 42% of the window, read at 10:37.
         func reading(_ pct: Double = 87, gone: Double = 0.42, age: TimeInterval) -> Window {
