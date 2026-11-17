@@ -27,6 +27,12 @@ forecast tell you something true about your usage.
   day's pace for a week and the last hour's for a session. An account unchanged for 12 hours
   (30 minutes for a session) says "not used for 3 days" instead of a run-out time, and isn't
   orange. Before enough is remembered, the straight line from the window's start, as before.
+- #73 **A week barely over pace is green while the forecast is the straight line**: 10% with
+  9% of the week gone (1 point over) ran out a day early by the straight line and showed
+  orange. For a week or a session, under 5 points over pace now counts as on pace ("close to
+  an even pace") whenever the forecast is that straight line: before the app remembers enough
+  readings to know the recent pace (#30: 6 hours to a day for a week, 15 minutes to an hour for
+  a session), or in a window younger than that.
 - #48 **Keep the tooling and the plan in order**, a standing item: product-kit's tools kept
   current (each update is a step of it), local CI, and the board and these pages saying the
   same, which the plan itself (#35) started on 13 Nov.
