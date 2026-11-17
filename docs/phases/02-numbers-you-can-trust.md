@@ -19,6 +19,8 @@ forecast tell you something true about your usage.
   the menu bar and the dropdown says when it last checked.
 - #68 **Session colour follows the forecast**: a session on track to last until its reset is
   green (44%, on track for 64%), orange when it will run out first, red from 80%.
+- #70 **Weekly red only when nearly out**: a week barely over pace (9%, runs out two days
+  early) is orange, not red; red from 80% used, the same rule as the session.
 - #30 **A forecast that means something**: "runs out tomorrow" only from the pace you're
   actually using it at, nothing for an account you haven't used in days; or no forecast, only
   over or under pace.

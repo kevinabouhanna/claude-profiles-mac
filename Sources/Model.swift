@@ -237,7 +237,7 @@ struct Window {
     enum Severity { case fine, warning, critical }
 
     /// The thresholds, which Settings also states (#20).
-    static let warningAt = 40.0, criticalAt = 80.0, weeklyCriticalAt = 90.0
+    static let warningAt = 40.0, criticalAt = 80.0
     /// Running out this close to the reset counts as lasting until it: 3% of the window,
     /// 9 minutes of a session or 5 hours of a week, so a reading on pace doesn't flicker.
     static let closeToReset = 0.03
@@ -248,20 +248,13 @@ struct Window {
         used >= criticalAt ? .critical : (used >= warningAt ? .warning : .fine)
     }
 
-    /// A session with a forecast (#68): orange only when it runs out before its reset, so 44%
-    /// on track for 64% is green; red from 80% used, whatever the pace, as a switch is close.
-    /// `early` is how long before the reset it runs out; nil when it lasts.
-    static func sessionSeverity(_ used: Double, early: TimeInterval?) -> Severity {
+    /// A session or a week with a forecast (#68, #70): orange only when it runs out before its
+    /// reset, so 44% on track for 64% is green; red only from 80% used, whatever the pace, so
+    /// a week barely over pace on day two is orange, not red. `early` is how long before the
+    /// reset it runs out; nil when it lasts.
+    static func forecastSeverity(_ used: Double, early: TimeInterval?) -> Severity {
         if used >= criticalAt { return .critical }
         return early == nil ? .fine : .warning
-    }
-
-    /// A week with a forecast, by whether it lasts until its reset. `early` is how long
-    /// before the reset it runs out; nil when it lasts. Red a day or more early.
-    static func weeklySeverity(_ used: Double, early: TimeInterval?) -> Severity {
-        if used >= weeklyCriticalAt { return .critical }
-        guard let early else { return .fine }
-        return early >= 86400 ? .critical : .warning
     }
 
     init(
@@ -335,9 +328,7 @@ struct Window {
         pacePct = pace
         forecast = text
         // The colour never says something the sentence under the bar doesn't.
-        severity = !hasForecast ? Self.levelSeverity(measured)
-            : period == weekPeriod ? Self.weeklySeverity(measured, early: early)
-            : Self.sessionSeverity(measured, early: early)
+        severity = hasForecast ? Self.forecastSeverity(measured, early: early) : Self.levelSeverity(measured)
     }
 
     var display: Int { Int(pct.rounded()) }
