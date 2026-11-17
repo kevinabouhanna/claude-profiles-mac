@@ -160,12 +160,13 @@ enum Credits {
         guard left > 0 else { return nil }
         var details: [String] = []
         for promo in balance.promos where promo.remainingCents > 0 && (promo.expires ?? .distantFuture) > now {
-            let kind = promo.monthly ? "monthly credit" : "promotional credit"
+            let kind = promo.monthly ? "Monthly credit" : "Promotional credit"
+            let of = promo.grantedCents > promo.remainingCents ? " of \(money(promo.grantedCents, balance.currency))" : ""
             let ends = promo.expires.map { ", expires \(expiryFormatter.string(from: $0))" } ?? ""
-            details.append("\(money(promo.remainingCents, balance.currency)) \(kind)\(ends)")
+            details.append("\(kind): \(money(promo.remainingCents, balance.currency))\(of)\(ends)")
         }
         if balance.boughtCents > 0 {
-            details.append("\(money(balance.boughtCents, balance.currency)) bought")
+            details.append("Bought: \(money(balance.boughtCents, balance.currency))")
         }
         return CreditsLine(
             amount: "\(money(left, balance.currency)) left", details: details,
@@ -513,19 +514,20 @@ final class ConsoleSignInWindow: NSObject, WKNavigationDelegate, WKUIDelegate, N
             """)
         note.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         note.textColor = .secondaryLabelColor
-        let stack = NSStackView(views: [note, web])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 12, left: 0, bottom: 0, right: 0)
-        note.translatesAutoresizingMaskIntoConstraints = false
-        web.translatesAutoresizingMaskIntoConstraints = false
-        window.contentView = stack
+        let content = NSView()
+        for view in [note, web] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            content.addSubview(view)
+        }
+        window.contentView = content
         NSLayoutConstraint.activate([
-            note.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 16),
-            note.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16),
-            web.leadingAnchor.constraint(equalTo: stack.leadingAnchor),
-            web.trailingAnchor.constraint(equalTo: stack.trailingAnchor),
+            note.topAnchor.constraint(equalTo: content.topAnchor, constant: 12),
+            note.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            note.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            web.topAnchor.constraint(equalTo: note.bottomAnchor, constant: 10),
+            web.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            web.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            web.bottomAnchor.constraint(equalTo: content.bottomAnchor),
         ])
         window.center()
         web.navigationDelegate = self
@@ -563,6 +565,7 @@ final class ConsoleSignInWindow: NSObject, WKNavigationDelegate, WKUIDelegate, N
             contentRect: popup.frame, styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false
         )
         w.isReleasedWhenClosed = false
+        w.title = "Sign In"
         w.contentView = popup
         w.center()
         w.makeKeyAndOrderFront(nil)

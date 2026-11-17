@@ -3,6 +3,7 @@ import AppKit
 import Combine
 import ServiceManagement
 import SwiftUI
+import WebKit
 
 @MainActor
 final class StatusController: NSObject, NSPopoverDelegate {
@@ -467,6 +468,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AutoSwitcher.shared.sync()
             CreditsMonitor.shared.sync()
         }
+        // `-previewConsoleSignIn someone@example.com`: the Console sign-in window for a made-up
+        // account, for a look at it in a VM (#31). A sign-in made there is thrown away on close.
+        if let email = UserDefaults.standard.string(forKey: "previewConsoleSignIn"),
+           let account = try? JSONDecoder().decode(Account.self, from: JSONSerialization.data(withJSONObject: ["number": 0, "email": email])) {
+            ConsoleSignInWindow.show(for: account, store: UUID())
+        }
     }
 
     /// The Dock icon, there while Settings is open.
@@ -565,8 +572,9 @@ enum Debug {
         case "--snapshot-titles" where args.count == 3: return snapshotTitles(json: args[1], dir: args[2])
         case "--snapshot-panel" where args.count == 3: return snapshotPanel(json: args[1], dir: args[2])
         case "--selftest" where args.count == 2: return selftest(json: args[1])
+        case "--console-check" where args.count == 1: return consoleCheck()
         default:
-            print("usage: --snapshot-settings <list.json> <dir> | --snapshot-titles <list.json> <dir> | --snapshot-panel <list.json> <dir> | --selftest <list.json>")
+            print("usage: --snapshot-settings <list.json> <dir> | --snapshot-titles <list.json> <dir> | --snapshot-panel <list.json> <dir> | --selftest <list.json> | --console-check")
             return 2
         }
     }
@@ -730,6 +738,32 @@ enum Debug {
             print("\(name): \(MenuBarImage.plainText(account, style))")
         }
         return 0
+    }
+
+    /// One API credits check against the real Console on a new, empty sign-in (#31): it must
+    /// come back as signed out, not as a failure, or an expired sign-in would read as
+    /// "couldn't check". Shows no window, and the empty data store is removed afterwards.
+    private static func consoleCheck() -> Int32 {
+        let store = UUID()
+        var result: ConsoleCheck.Outcome?
+        Task { @MainActor in result = await ConsoleCheck.run(store: store, organizationUuid: nil) }
+        let deadline = Date().addingTimeInterval(Credits.timeout + 5)
+        while result == nil && Date() < deadline { spin(0.2) }
+        var removed = false
+        Task { @MainActor in try? await WKWebsiteDataStore.remove(forIdentifier: store); removed = true }
+        while !removed && Date() < deadline.addingTimeInterval(10) { spin(0.2) }
+        switch result {
+        case .problem(.signedOut, let why)?:
+            print("ok    a new sign-in reads as signed out (\(why))")
+            return 0
+        case .problem(let problem, let why)?:
+            print("FAIL  expected signed out, got \(problem.rawValue): \(why)")
+        case .balance?:
+            print("FAIL  expected signed out, got a balance")
+        case nil:
+            print("FAIL  no answer in \(Int(Credits.timeout + 5)) s")
+        }
+        return 1
     }
 
     /// WCAG contrast between two colours, 1...21: 4.5 is the least for readable text.
@@ -1103,10 +1137,10 @@ enum Debug {
         check("Max in its first 7 days (a zero balance): nothing shown", shown(record(none)) == nil && shown(nil) == nil)
         let maxLine = shown(record(maxCredits))
         check("Max with credits: shows what's left", maxLine?.amount == "$100.00 left")
-        check("Max credits say they're monthly and when they expire", maxLine?.details == ["$100.00 monthly credit, expires Dec 12"])
+        check("Max credits say they're monthly and when they expire", maxLine?.details == ["Monthly credit: $100.00, expires Dec 12"])
         check("the setting turns it off", shown(record(maxCredits), on: false) == nil)
-        check("bought credits show as bought", shown(record(bought))?.details == ["$25.00 bought"] && shown(record(bought))?.amount == "$25.00 left")
-        check("monthly and bought told apart", shown(record(mixed))?.details == ["$61.20 monthly credit, expires Dec 12", "$12.00 bought"])
+        check("bought credits show as bought", shown(record(bought))?.details == ["Bought: $25.00"] && shown(record(bought))?.amount == "$25.00 left")
+        check("monthly and bought told apart", shown(record(mixed))?.details == ["Monthly credit: $61.20 of $100.00, expires Dec 12", "Bought: $12.00"])
         check("monthly credits past their expiry are gone", shown(record(maxCredits), at: parseISO("2026-12-12T00:00:01Z")!) == nil
               && shown(record(mixed), at: parseISO("2026-12-13T00:00:00Z")!)?.amount == "$12.00 left")
         check("a current reading has no warning", maxLine?.warning == nil)

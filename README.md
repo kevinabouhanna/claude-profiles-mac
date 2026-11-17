@@ -14,7 +14,7 @@
 
 **[⬇️ Download for Mac](https://github.com/kevinabouhanna/claude-profiles-mac/releases/latest/download/ClaudeProfiles.dmg)** · [All releases](https://github.com/kevinabouhanna/claude-profiles-mac/releases) · [Windows version](https://github.com/kevinabouhanna/claude-profiles-windows)
 
-<img src="docs/images/dropdown-dark.png" alt="The dropdown in dark mode: tabs for the Work and Personal accounts with Work selected and marked in use, Session and Weekly usage cards with pace markers, and a status bar reading Using Work with a Switch menu" width="320">
+<img src="docs/images/dropdown-dark.png" alt="The dropdown in dark mode: tabs for the Work and Personal accounts with Work selected and marked in use, Session and Weekly usage cards with pace markers, an API Credits card reading $73.20 left of a monthly credit that expires Dec 1, and a status bar reading Using Work with a Switch menu" width="320">
 <img src="docs/images/dropdown-viewing-light.png" alt="The dropdown in light mode looking at the Personal tab while the status bar still reads Using Work" width="320">
 <br><sub>Demo data.</sub>
 
@@ -31,12 +31,13 @@ usage, and opens into a Liquid Glass dropdown with the detail.
 |---|---|
 | 📊 **Usage at a glance** | Session and weekly percentages in the menu bar, with pace and reset times in the dropdown for any account, not only the one in use. Per-model limits (Fable's is hidden by default) can be shown in Settings → General. When the last reading is more than 10 minutes old, the numbers dim and the dropdown says when it last checked. |
 | 📏 **Know your pace** | A marker on each bar shows where even usage would put you, and a forecast says whether you'll run out before the reset at the pace you're using it now (the last day of a week, the last hour of a session). An account you haven't touched in a while says so instead of giving a run-out time. The colours say how close you are to running out: orange when a session or week won't last until it resets, red from 80% used or when a week is far over pace. |
+| 💳 **API credits** | Optional, off by default. Turn on Show API Credits in Settings → General and sign each account in to the Claude Console once: its tab then shows the API credits it has left, the monthly ones that come with Max (and when they expire) and any you've bought. An account without credits (Pro, or Max in its first week, before the monthly credits arrive) shows nothing. Anthropic has no official way to read the balance, so this reads the Console's Billing page as your browser does, and may stop working if the Console changes. |
 | 🔁 **Quick switching** | The status bar at the bottom of the dropdown always says which account Claude Code is using; its Switch menu lists every account with its numbers. |
 | 🏷️ **Name your accounts** | Call them Work, Personal or anything else, spaces included, instead of reading email addresses. |
 | 🤖 **Auto-Switch** | Optionally moves to another account when the active one nears its limit (`cswap auto`). |
 | 🎨 **Your menu bar, your style** | Layout, separator, labels, size and weight, and colors that follow the menu bar, follow your usage, or are custom, with separate light and dark picks. |
 | 🌗 **Light and dark** | Everything follows the system appearance, the menu bar's own included. |
-| 🔒 **Local only** | No telemetry. The only network traffic is claude-swap's own usage checks. |
+| 🔒 **Local only** | No telemetry. The only network traffic is claude-swap's own usage checks, and, only if you turn on API credits, a balance check with the Claude Console every 15 minutes. |
 
 ## Install
 
@@ -93,7 +94,9 @@ top of `build.sh` for what it needs. Releases are cut by pushing a `v*` tag, whi
   runs it to list your accounts and their usage (`cswap list`), switch accounts (`cswap switch`), save
   logins and include or exclude them from Auto-Switch (`cswap add`, `enable`, `disable`), read and change
   Auto-Switch settings (`cswap config`), and run Auto-Switch itself (`cswap auto`). claude-swap keeps
-  your logins; this app never reads or stores a credential itself. Install it separately (see
+  your logins; this app never reads or stores a credential itself. The one sign-in the app keeps, the
+  optional Claude Console one for API credits, stays in WebKit's own storage, one per account; the app
+  never reads it or sees your password, and Sign Out in Settings deletes it. Install it separately (see
   [Install](#install)); it isn't bundled.
 
 Everything else is Apple's own frameworks (AppKit, SwiftUI, Combine), with no third-party packages.
