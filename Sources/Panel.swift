@@ -417,8 +417,10 @@ struct PanelView: View {
             )
         }
         if account.carriedOver {
+            // Old cards already say when they last checked (#34); this adds only why.
+            let cardsSayAge = account.session?.isOld == true || account.weekly?.isOld == true
             let age = account.fetchedDate.map { ageText(since: $0) } ?? "earlier"
-            Text("Last reading, from \(age). \(account.statusMessage ?? "")")
+            Text((cardsSayAge ? "Showing the last reading. " : "Last reading, from \(age). ") + (account.statusMessage ?? ""))
                 .font(.system(size: 12)).foregroundStyle(.secondary)
         } else if account.session == nil && account.weekly == nil {
             Text(account.statusMessage ?? "No usage available yet.")

@@ -226,9 +226,13 @@ enum MenuBarImage {
         let primary: NSColor = template ? .black : (dark ? .white : .black)
         let secondary = primary.withAlphaComponent(0.55)
 
+        // An old reading's number and label are dimmed alike (#34), in a template too (macOS
+        // keeps its alpha), so the number never draws fainter than its own label.
+        func dimmed(_ c: NSColor, _ s: Segment) -> NSColor {
+            s.old ? c.withAlphaComponent(c.alphaComponent * 0.45) : c
+        }
         func color(_ s: Segment) -> NSColor {
-            // An old reading's number is dimmed (#34), in a template too (macOS keeps its alpha).
-            let dim: (NSColor) -> NSColor = { s.old ? $0.withAlphaComponent(0.45) : $0 }
+            let dim: (NSColor) -> NSColor = { dimmed($0, s) }
             guard !template else { return dim(primary) }
             switch style.colorMode {
             case .system: return dim(primary)
@@ -245,7 +249,7 @@ enum MenuBarImage {
                 if i > 0 {
                     out.append(text(style.separator.isEmpty ? " " : " \(style.separator) ", secondary))
                 }
-                if style.showLabels { out.append(text("\(s.label) ", secondary)) }
+                if style.showLabels { out.append(text("\(s.label) ", dimmed(secondary, s))) }
                 out.append(text(s.value, color(s)))
             }
             return out

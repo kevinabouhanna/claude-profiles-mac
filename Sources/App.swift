@@ -71,6 +71,14 @@ final class StatusController: NSObject, NSPopoverDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.requestRedraw() }
             .store(in: &bag)
+        // A failed refresh publishes no accounts, but the reading still ages: re-check it once
+        // per refresh, so it dims even while cswap can't be read (#34). `redraw` skips it otherwise.
+        Store.shared.$loading
+            .removeDuplicates()
+            .filter { !$0 }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.requestRedraw() }
+            .store(in: &bag)
         Prefs.shared.onStyleChange = { [weak self] in self?.requestRedraw() }
         // Increase Contrast picks stronger usage colours (#63); `redraw` skips it if nothing changed.
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -823,29 +831,32 @@ enum Debug {
         check("a week out exactly a day early is red", Window.weeklySeverity(50, early: 86400) == .critical)
 
         // #34: an old reading says so. The 13 Nov case: 87% at 42% of the window, read at 10:37.
-        func reading(age: TimeInterval, staleAfter: TimeInterval = 600) -> Window {
-            Window(raw: raw(87, resetIn: 0.58 * fiveHourPeriod - age), period: fiveHourPeriod,
-                   fetchedAt: now.addingTimeInterval(-age), now: now, staleAfter: staleAfter)
+        func reading(_ pct: Double = 87, gone: Double = 0.42, age: TimeInterval) -> Window {
+            Window(raw: raw(pct, resetIn: (1 - gone) * fiveHourPeriod - age), period: fiveHourPeriod,
+                   fetchedAt: now.addingTimeInterval(-age), now: now)
         }
         check("a reading 15 min old is old", reading(age: 900).checkedAt == now.addingTimeInterval(-900))
         check("a reading 2 min old isn't", !reading(age: 120).isOld)
-        check("with a 10-min refresh, 15 min isn't old", staleLimit(refresh: 600) == 1200
-              && !reading(age: 900, staleAfter: staleLimit(refresh: 600)).isOld)
+        check("old means over 10 minutes", staleLimit == 600 && !reading(age: 590).isOld && reading(age: 610).isOld)
         check("an old forecast's passed run-out says so", reading(age: 1800).forecast == "May have run out by now")
+        // 95% at half the window runs out 8 minutes after the reading: 9 minutes on, it has passed.
+        let recent = reading(95, gone: 0.5, age: 540)
+        check("a recent reading's passed run-out says so too", !recent.isOld && recent.forecast == "May have run out by now")
         check("a fresh forecast still gives the time", reading(age: 60).forecast?.contains("% over pace · runs out ") == true)
         func weekRow(fetchedAgo: TimeInterval) -> Account? {
             let f = ISO8601DateFormatter()
             let json = #"{"number":7,"active":true,"usageStatus":"ok","usage":{"fiveHour":null,"sevenDay":{"pct":30,"resetsAt":"\#(f.string(from: clock().addingTimeInterval(3 * 86400)))"}},"usageFetchedAt":"\#(f.string(from: clock().addingTimeInterval(-fetchedAgo)))"}"#
             return try? JSONDecoder().decode(Account.self, from: Data(json.utf8))
         }
-        if let fresh = weekRow(fetchedAgo: 30), let stale = weekRow(fetchedAgo: 3 * 3600) {
+        if let fresh = weekRow(fetchedAgo: 30), let stale = weekRow(fetchedAgo: 3 * 3600),
+           let staler = weekRow(fetchedAgo: 3 * 3600 + 300) {
             var usage = TitleStyle(); usage.colorMode = .usage; usage.content = .weekly
             let freshImage = MenuBarImage.render(fresh, usage, dark: true, template: false).tiffRepresentation
             let staleImage = MenuBarImage.render(stale, usage, dark: true, template: false).tiffRepresentation
             check("an old reading draws dimmed in the menu bar", freshImage != staleImage && MenuBarImage.showsOld(stale, usage))
-            check("turning old changes the redraw key once",
-                  MenuBarImage.lookKey(fresh, usage) != MenuBarImage.lookKey(stale, usage)
-                  && MenuBarImage.lookKey(stale, usage) == MenuBarImage.lookKey(stale, usage))
+            // The redraw key and plain text change when it turns old, then not as it ages.
+            func key(_ a: Account) -> String { MenuBarImage.lookKey(a, usage) + MenuBarImage.plainText(a, usage) }
+            check("turning old changes the redraw key once", key(fresh) != key(stale) && key(stale) == key(staler))
         } else {
             check("old reading fixtures decode", false)
         }
