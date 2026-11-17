@@ -215,12 +215,7 @@ enum MenuBarImage {
             switch style.colorMode {
             case .system: return primary
             case .custom: return nsColor(hex: style.customHex(session: s.role == .session, dark: dark))
-            case .usage:
-                switch s.severity {
-                case .fine: return .systemGreen
-                case .overPace: return .systemOrange
-                case .critical: return .systemRed
-                }
+            case .usage: return UsageColors.color(s.severity, dark: dark, highContrast: UsageColors.increaseContrast)
             }
         }
         func text(_ string: String, _ c: NSColor) -> NSAttributedString {

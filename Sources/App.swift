@@ -72,6 +72,12 @@ final class StatusController: NSObject, NSPopoverDelegate {
             .sink { [weak self] _ in self?.requestRedraw() }
             .store(in: &bag)
         Prefs.shared.onStyleChange = { [weak self] in self?.requestRedraw() }
+        // Increase Contrast picks stronger usage colours (#63); `redraw` skips it if nothing changed.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.requestRedraw() }
+        }
         // Not a reason to redraw by itself: `redraw` skips it unless light/dark changed.
         appearanceObservation = button.observe(\.effectiveAppearance) { [weak self] _, _ in
             Task { @MainActor in self?.requestRedraw() }
@@ -144,7 +150,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
         // Everything the picture depends on. The same key means the same image, so it
         // isn't drawn again; this is what ends a loop where drawing triggers a request.
         let key = [
-            MenuBarImage.plainText(account, style), "\(style)", "\(dark)",
+            MenuBarImage.plainText(account, style), "\(style)", "\(dark)", "\(UsageColors.increaseContrast)",
             "\(account?.session?.severity as Any)", "\(account?.weekly?.severity as Any)",
             ModelLimits.hidden.sorted().joined(separator: ","),
         ].joined(separator: "|")
@@ -712,6 +718,17 @@ enum Debug {
         return 0
     }
 
+    /// WCAG contrast between two colours, 1...21: 4.5 is the least for readable text.
+    private static func contrastRatio(_ a: NSColor, _ b: NSColor) -> Double {
+        func luminance(_ c: NSColor) -> Double {
+            guard let s = c.usingColorSpace(.sRGB) else { return 0 }
+            func lin(_ v: CGFloat) -> Double { v <= 0.04045 ? Double(v) / 12.92 : pow((Double(v) + 0.055) / 1.055, 2.4) }
+            return 0.2126 * lin(s.redComponent) + 0.7152 * lin(s.greenComponent) + 0.0722 * lin(s.blueComponent)
+        }
+        let (x, y) = (luminance(a), luminance(b))
+        return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+    }
+
     private static func selftest(json: String) -> Int32 {
         var failures = 0
         func check(_ name: String, _ ok: Bool) {
@@ -742,6 +759,26 @@ enum Debug {
         s = TitleStyle(); s.layout = .stacked
         let image = MenuBarImage.render(account, s, dark: true, template: false)
         check("stacked fits the bar", image.size.height <= 22 && image.size.width > 0)
+        // #63: readable on the darkest light bar and the lightest dark bar macOS shows.
+        let severities: [Window.Severity] = [.fine, .overPace, .critical]
+        func readable(dark: Bool, high: Bool, on bar: String, at least: Double) -> Bool {
+            severities.allSatisfy { contrastRatio(UsageColors.color($0, dark: dark, highContrast: high), nsColor(hex: bar)) >= least }
+        }
+        check("usage colours readable on a light bar", readable(dark: false, high: false, on: "#EBEBEB", at: 4.5))
+        check("usage colours readable on a dark bar", readable(dark: true, high: false, on: "#2A2A2A", at: 4.5))
+        check("increase contrast is stronger", readable(dark: false, high: true, on: "#EBEBEB", at: 7)
+            && readable(dark: true, high: true, on: "#1E1E1E", at: 7))
+        check("the dropdown uses the menu bar's colours", severities.allSatisfy { s in
+            [false, true].allSatisfy { dark in
+                guard let appearance = NSAppearance(named: dark ? .darkAqua : .aqua) else { return false }
+                var shown = NSColor.clear
+                appearance.performAsCurrentDrawingAppearance {
+                    shown = NSColor(Palette.tint(s)).usingColorSpace(.sRGB) ?? .clear
+                }
+                let menuBar = UsageColors.color(s, dark: dark, highContrast: UsageColors.increaseContrast)
+                return hexString(shown) == hexString(menuBar)
+            }
+        })
 
         // Pace
         let now = Date()
