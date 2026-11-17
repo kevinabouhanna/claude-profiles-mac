@@ -134,34 +134,6 @@ func hexString(_ color: NSColor) -> String {
     )
 }
 
-/// The usage colours, one palette for the menu bar and the dropdown (#63). A darker shade on a
-/// light bar, a brighter one on a dark bar: each reaches 4.5:1 contrast on its own bar (the
-/// stock system colours reach about 2:1 on a light one). Made once, never per redraw.
-enum UsageColors {
-    private static let light = (fine: nsColor(hex: "#178038"), over: nsColor(hex: "#B25000"), critical: nsColor(hex: "#C22624"))
-    private static let dark = (fine: nsColor(hex: "#40C76B"), over: nsColor(hex: "#F59E38"), critical: nsColor(hex: "#FF6961"))
-
-    static func color(_ severity: Window.Severity, dark isDark: Bool) -> NSColor {
-        let set = isDark ? dark : light
-        switch severity {
-        case .fine: return set.fine
-        case .overPace: return set.over
-        case .critical: return set.critical
-        }
-    }
-}
-
-/// WCAG contrast between two colours, 1...21: 4.5 is the least for readable text.
-func contrastRatio(_ a: NSColor, _ b: NSColor) -> Double {
-    func luminance(_ c: NSColor) -> Double {
-        let s = c.usingColorSpace(.sRGB) ?? c
-        func lin(_ v: CGFloat) -> Double { v <= 0.04045 ? Double(v) / 12.92 : pow((Double(v) + 0.055) / 1.055, 2.4) }
-        return 0.2126 * lin(s.redComponent) + 0.7152 * lin(s.greenComponent) + 0.0722 * lin(s.blueComponent)
-    }
-    let (x, y) = (luminance(a), luminance(b))
-    return (max(x, y) + 0.05) / (min(x, y) + 0.05)
-}
-
 enum MenuBarImage {
     private enum Role { case session, weekly }
 
@@ -243,7 +215,7 @@ enum MenuBarImage {
             switch style.colorMode {
             case .system: return primary
             case .custom: return nsColor(hex: style.customHex(session: s.role == .session, dark: dark))
-            case .usage: return UsageColors.color(s.severity, dark: dark)
+            case .usage: return UsageColors.color(s.severity, dark: dark, highContrast: UsageColors.increaseContrast)
             }
         }
         func text(_ string: String, _ c: NSColor) -> NSAttributedString {

@@ -2,6 +2,33 @@
 import AppKit
 import SwiftUI
 
+/// The usage colours, one palette for the menu bar and the dropdown (#63). A darker shade on a
+/// light bar, a brighter one on a dark bar: each reaches 4.5:1 contrast on a light bar as dark
+/// as #EBEBEB or a dark one as light as #2A2A2A (the stock system colours reach about 2:1 on a
+/// light bar), and 7:1 when Increase Contrast is on. Made once, never per redraw.
+enum UsageColors {
+    private typealias Set = (fine: NSColor, warning: NSColor, critical: NSColor)
+    private static func set(_ fine: String, _ warning: String, _ critical: String) -> Set {
+        (nsColor(hex: fine), nsColor(hex: warning), nsColor(hex: critical))
+    }
+    private static let light = set("#147534", "#A14900", "#C22624")
+    private static let dark = set("#40C76B", "#F59E38", "#FF6961")
+    private static let lightHigh = set("#0E5A25", "#7F3900", "#991A18")
+    private static let darkHigh = set("#7BE59B", "#FFBE73", "#FF9690")
+
+    /// System Settings > Accessibility > Display > Increase contrast.
+    static var increaseContrast: Bool { NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast }
+
+    static func color(_ severity: Window.Severity, dark isDark: Bool, highContrast: Bool) -> NSColor {
+        let s = highContrast ? (isDark ? darkHigh : lightHigh) : (isDark ? dark : light)
+        switch severity {
+        case .fine: return s.fine
+        case .overPace: return s.warning
+        case .critical: return s.critical
+        }
+    }
+}
+
 enum Palette {
     static let card = Color.primary.opacity(0.055)
     static let cardLine = Color.primary.opacity(0.08)
@@ -16,14 +43,13 @@ enum Palette {
             ? NSColor(white: 1, alpha: 0.17) : NSColor(white: 1, alpha: 1)
     })
 
-    /// Also what the self-test reads, to check the dropdown and the menu bar agree.
-    static func adaptiveNS(_ severity: Window.Severity) -> NSColor {
-        NSColor(name: nil) { appearance in
-            UsageColors.color(severity, dark: appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
-        }
+    private static func adaptive(_ severity: Window.Severity) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            // The same Increase Contrast reading as the menu bar, so the two always agree.
+            let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            return UsageColors.color(severity, dark: dark, highContrast: UsageColors.increaseContrast)
+        })
     }
-
-    private static func adaptive(_ severity: Window.Severity) -> Color { Color(nsColor: adaptiveNS(severity)) }
 
     static func tint(_ s: Window.Severity) -> Color {
         switch s {
