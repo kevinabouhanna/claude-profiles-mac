@@ -824,10 +824,17 @@ enum Debug {
         check("session 80% is red, even under pace", session(80, gone: 0.9).severity == .critical)
         check("weekly on track to last is green", weekly(71, gone: 0.74).severity == .fine)
         check("weekly out a few hours early is orange", weekly(75, gone: 0.7).severity == .warning)
-        // #70: 9% with 7% gone runs out ~2 days early, but it's barely over pace: orange.
+        // #70, #73: 9% with 7% gone, and 10% with 9% gone, are barely over pace: the straight line
+        // runs them out a day or two early, but they're green and say so.
         let barelyOver = weekly(9, gone: 0.07)
-        check("weekly barely over pace is orange, not red",
-              barelyOver.severity == .warning && barelyOver.forecast?.contains("runs out") == true)
+        check("weekly barely over pace is green, close to an even pace",
+              barelyOver.severity == .fine && barelyOver.forecast == "2% over pace · close to an even pace")
+        let screenshot73 = weekly(10, gone: 0.09)
+        check("10% with 9% of the week gone is green",
+              screenshot73.severity == .fine && screenshot73.forecast == "1% over pace · close to an even pace")
+        let fivePointsOver = weekly(14, gone: 0.09)
+        check("5 points over pace still runs out in orange",
+              fivePointsOver.severity == .warning && fivePointsOver.forecast?.contains("5% over pace · runs out ") == true)
         check("weekly far over pace is red", weekly(70, gone: 0.43).severity == .critical)
         check("weekly 80% is red", weekly(80, gone: 0.95).severity == .critical)
         let dayOne = weekly(6, gone: 0.04)
@@ -835,9 +842,9 @@ enum Debug {
         check("on pace says it lasts about until the reset",
               session(20, gone: 0.199).forecast == "On pace · runs out about when it resets")
         check("weekly 85% in the first hours is red", weekly(85, gone: 0.036).severity == .critical)
-        let nearlyOnPace = weekly(10, gone: 0.0955)  // runs out ~7.5 h (4.5%) early
-        check("a week running out hours early says when, in orange",
-              nearlyOnPace.severity == .warning && nearlyOnPace.forecast?.contains("runs out about") == false)
+        let nearlyOnPace = weekly(10, gone: 0.0955)  // the straight line: ~7.5 h (4.5%) early
+        check("a week on pace by the straight line lasts about until the reset",
+              nearlyOnPace.severity == .fine && nearlyOnPace.forecast == "On pace · runs out about when it resets")
         let onPace = weekly(50.01, gone: 0.5)  // runs out seconds early
         check("a week on pace stays green", onPace.severity == .fine && onPace.forecast?.contains("about when it resets") == true)
         check("79% a little over pace is orange", weekly(79, gone: 0.7).severity == .warning)
@@ -922,6 +929,9 @@ enum Debug {
         // 95% at half the window runs out 8 minutes after the reading: 9 minutes on, it has passed.
         let recent = reading(95, gone: 0.5, age: 540)
         check("a recent reading's passed run-out says so too", !recent.isOld && recent.forecast == "May have run out by now")
+        // Code review of #74: close to an even pace doesn't hide a run-out time that has passed.
+        check("a passed run-out says so even close to an even pace",
+              reading(54, gone: 0.5, age: 2.2 * 3600).forecast == "May have run out by now")
         check("a fresh forecast still gives the time", reading(age: 60).forecast?.contains("% over pace · runs out ") == true)
         func weekRow(fetchedAgo: TimeInterval) -> Account? {
             let f = ISO8601DateFormatter()

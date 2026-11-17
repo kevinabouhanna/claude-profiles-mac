@@ -255,6 +255,9 @@ struct Window {
     /// A week this many points over pace, and running out before its reset, is red (#70):
     /// clearly in trouble, not a forecast run long from a small lead.
     static let weeklyFarOverPace = 15.0
+    /// Less than this many points over pace counts as on pace while the forecast is the straight
+    /// line from the window's start (#73): 1 point over at 9% of a week projects to 111%.
+    static let nearPace = 5.0
 
     /// A session or a week with a forecast (#68, #70): orange only when it runs out before its
     /// reset, so 44% on track for 64% is green. Red from 80% used, whatever the pace, as the
@@ -291,7 +294,7 @@ struct Window {
         let from = measuredAt - lookback(period)
         let rate: Double
         if from <= start {
-            rate = measured / max(1, measuredAt.timeIntervalSince(start))  // the window is younger
+            return nil  // the window is younger than the lookback: its straight line is its pace
         } else if let then = readings.last(where: { $0.at <= from }) {
             // Over the time since that reading, which is longer than the lookback when the app
             // wasn't running in between (code review of #72): its use is spread over all of it.
@@ -355,12 +358,14 @@ struct Window {
                 // How fast it's going up now (#30); without enough remembered, the straight
                 // line from the window's start, as before.
                 let rate: Double
+                var straightLine = true
                 switch history.flatMap({ Self.recentUse($0, measured: measured, at: measuredAt, start: start, period: period) }) {
                 case .idle(let since)?:
                     rate = 0
                     text = "\(lead) · not used for \(idleText(measuredAt.timeIntervalSince(since)))"
                 case .rate(let r)?:
                     rate = r
+                    straightLine = false
                 case nil:
                     rate = measured / max(1, measuredAt.timeIntervalSince(start))
                 }
@@ -375,6 +380,9 @@ struct Window {
                             // Worked out from an earlier reading, its run-out time has passed.
                             text = "May have run out by now"
                             early = before
+                        } else if straightLine && delta.rounded() < Self.nearPace {
+                            // #73: a straight line turns a small lead into a run-out a day early.
+                            text = gap < 1 ? "On pace · runs out about when it resets" : "\(lead) · close to an even pace"
                         } else if before < period * Self.closeToReset {
                             // A time minutes before the reset would read as a warning.
                             text = "\(lead) · runs out about when it resets"
