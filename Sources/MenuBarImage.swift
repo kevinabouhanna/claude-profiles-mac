@@ -142,6 +142,8 @@ enum MenuBarImage {
         let value: String
         let role: Role
         let severity: Window.Severity
+        /// Drawn dimmed: the reading is old (#34).
+        let old: Bool
     }
 
     private static func segments(_ account: Account?, _ style: TitleStyle) -> [Segment] {
@@ -151,7 +153,10 @@ enum MenuBarImage {
                 let n = style.showRemaining ? max(0, 100 - window.display) : window.display
                 value = String(n) + (style.showPercent ? "%" : "")
             }
-            return Segment(label: label, value: value, role: role, severity: window?.severity ?? .fine)
+            return Segment(
+                label: label, value: value, role: role,
+                severity: window?.severity ?? .fine, old: window?.isOld ?? false
+            )
         }
         var out: [Segment] = []
         let session = make("5h", account?.session, .session)
@@ -169,6 +174,17 @@ enum MenuBarImage {
             }
         }
         return out
+    }
+
+    /// Everything about the numbers' look beyond their text: each one's colour and whether it's
+    /// dimmed. Part of the status item's redraw key, so a reading turning old redraws once.
+    static func lookKey(_ account: Account?, _ style: TitleStyle) -> String {
+        segments(account, style).map { "\($0.severity)\($0.old ? "-old" : "")" }.joined(separator: ",")
+    }
+
+    /// Whether any number shown is from an old reading.
+    static func showsOld(_ account: Account?, _ style: TitleStyle) -> Bool {
+        segments(account, style).contains { $0.old }
     }
 
     private static func shortName(_ account: Account?) -> String? {
@@ -210,12 +226,18 @@ enum MenuBarImage {
         let primary: NSColor = template ? .black : (dark ? .white : .black)
         let secondary = primary.withAlphaComponent(0.55)
 
+        // An old reading's number and label are dimmed alike (#34), in a template too (macOS
+        // keeps its alpha), so the number never draws fainter than its own label.
+        func dimmed(_ c: NSColor, _ s: Segment) -> NSColor {
+            s.old ? c.withAlphaComponent(c.alphaComponent * 0.45) : c
+        }
         func color(_ s: Segment) -> NSColor {
-            guard !template else { return primary }
+            let dim: (NSColor) -> NSColor = { dimmed($0, s) }
+            guard !template else { return dim(primary) }
             switch style.colorMode {
-            case .system: return primary
-            case .custom: return nsColor(hex: style.customHex(session: s.role == .session, dark: dark))
-            case .usage: return UsageColors.color(s.severity, dark: dark, highContrast: UsageColors.increaseContrast)
+            case .system: return dim(primary)
+            case .custom: return dim(nsColor(hex: style.customHex(session: s.role == .session, dark: dark)))
+            case .usage: return dim(UsageColors.color(s.severity, dark: dark, highContrast: UsageColors.increaseContrast))
             }
         }
         func text(_ string: String, _ c: NSColor) -> NSAttributedString {
@@ -227,7 +249,7 @@ enum MenuBarImage {
                 if i > 0 {
                     out.append(text(style.separator.isEmpty ? " " : " \(style.separator) ", secondary))
                 }
-                if style.showLabels { out.append(text("\(s.label) ", secondary)) }
+                if style.showLabels { out.append(text("\(s.label) ", dimmed(secondary, s))) }
                 out.append(text(s.value, color(s)))
             }
             return out

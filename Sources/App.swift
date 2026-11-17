@@ -71,6 +71,14 @@ final class StatusController: NSObject, NSPopoverDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.requestRedraw() }
             .store(in: &bag)
+        // A failed refresh publishes no accounts, but the reading still ages: re-check it once
+        // per refresh, so it dims even while cswap can't be read (#34). `redraw` skips it otherwise.
+        Store.shared.$loading
+            .removeDuplicates()
+            .filter { !$0 }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.requestRedraw() }
+            .store(in: &bag)
         Prefs.shared.onStyleChange = { [weak self] in self?.requestRedraw() }
         // Increase Contrast picks stronger usage colours (#63); `redraw` skips it if nothing changed.
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -151,7 +159,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
         // isn't drawn again; this is what ends a loop where drawing triggers a request.
         let key = [
             MenuBarImage.plainText(account, style), "\(style)", "\(dark)", "\(UsageColors.increaseContrast)",
-            "\(account?.session?.severity as Any)", "\(account?.weekly?.severity as Any)",
+            MenuBarImage.lookKey(account, style),  // colours, and old readings dimmed (#34)
             ModelLimits.hidden.sorted().joined(separator: ","),
         ].joined(separator: "|")
         guard key != drawnKey else {
@@ -163,6 +171,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
         if Prefs.shared.menuBarIsDark != dark { Prefs.shared.menuBarIsDark = dark }
         button.image = MenuBarImage.render(account, style, dark: dark, template: style.colorMode == .system)
         let text = MenuBarImage.plainText(account, style)
+            + (MenuBarImage.showsOld(account, style) ? ", from an old reading" : "")
         button.toolTip = "Claude usage: \(text)"
         button.setAccessibilityLabel("Claude usage \(text)")
     }
@@ -820,6 +829,37 @@ enum Debug {
         let onPace = weekly(50.01, gone: 0.5)  // runs out seconds early
         check("a week on pace stays green", onPace.severity == .fine && onPace.forecast?.contains("about when it resets") == true)
         check("a week out exactly a day early is red", Window.weeklySeverity(50, early: 86400) == .critical)
+
+        // #34: an old reading says so. The 13 Nov case: 87% at 42% of the window, read at 10:37.
+        func reading(_ pct: Double = 87, gone: Double = 0.42, age: TimeInterval) -> Window {
+            Window(raw: raw(pct, resetIn: (1 - gone) * fiveHourPeriod - age), period: fiveHourPeriod,
+                   fetchedAt: now.addingTimeInterval(-age), now: now)
+        }
+        check("a reading 15 min old is old", reading(age: 900).checkedAt == now.addingTimeInterval(-900))
+        check("a reading 2 min old isn't", !reading(age: 120).isOld)
+        check("old means over 10 minutes", staleLimit == 600 && !reading(age: 590).isOld && reading(age: 610).isOld)
+        check("an old forecast's passed run-out says so", reading(age: 1800).forecast == "May have run out by now")
+        // 95% at half the window runs out 8 minutes after the reading: 9 minutes on, it has passed.
+        let recent = reading(95, gone: 0.5, age: 540)
+        check("a recent reading's passed run-out says so too", !recent.isOld && recent.forecast == "May have run out by now")
+        check("a fresh forecast still gives the time", reading(age: 60).forecast?.contains("% over pace · runs out ") == true)
+        func weekRow(fetchedAgo: TimeInterval) -> Account? {
+            let f = ISO8601DateFormatter()
+            let json = #"{"number":7,"active":true,"usageStatus":"ok","usage":{"fiveHour":null,"sevenDay":{"pct":30,"resetsAt":"\#(f.string(from: clock().addingTimeInterval(3 * 86400)))"}},"usageFetchedAt":"\#(f.string(from: clock().addingTimeInterval(-fetchedAgo)))"}"#
+            return try? JSONDecoder().decode(Account.self, from: Data(json.utf8))
+        }
+        if let fresh = weekRow(fetchedAgo: 30), let stale = weekRow(fetchedAgo: 3 * 3600),
+           let staler = weekRow(fetchedAgo: 3 * 3600 + 300) {
+            var usage = TitleStyle(); usage.colorMode = .usage; usage.content = .weekly
+            let freshImage = MenuBarImage.render(fresh, usage, dark: true, template: false).tiffRepresentation
+            let staleImage = MenuBarImage.render(stale, usage, dark: true, template: false).tiffRepresentation
+            check("an old reading draws dimmed in the menu bar", freshImage != staleImage && MenuBarImage.showsOld(stale, usage))
+            // The redraw key and plain text change when it turns old, then not as it ages.
+            func key(_ a: Account) -> String { MenuBarImage.lookKey(a, usage) + MenuBarImage.plainText(a, usage) }
+            check("turning old changes the redraw key once", key(fresh) != key(stale) && key(stale) == key(staler))
+        } else {
+            check("old reading fixtures decode", false)
+        }
 
         // A passing token expiry keeps the last reading
         func row(_ json: String) -> Account? { try? JSONDecoder().decode(Account.self, from: Data(json.utf8)) }

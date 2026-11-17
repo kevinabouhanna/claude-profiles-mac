@@ -120,6 +120,12 @@ struct UsageCard: View {
                 Text(window.resetsAt.map { "Resets \(formatWhen($0))" } ?? "Starts when you next use Claude")
                     .font(.system(size: 11))
                     .foregroundColor(.primary.opacity(0.5))
+                if let checked = window.checkedAt {
+                    // #34: say the number may be behind, rather than show it as current.
+                    Text("Last checked \(formatWhen(checked)) · \(ageText(since: checked))")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Palette.orange)
+                }
             }
         }
         .padding(12)
@@ -411,8 +417,10 @@ struct PanelView: View {
             )
         }
         if account.carriedOver {
+            // Old cards already say when they last checked (#34); this adds only why.
+            let cardsSayAge = account.session?.isOld == true || account.weekly?.isOld == true
             let age = account.fetchedDate.map { ageText(since: $0) } ?? "earlier"
-            Text("Last reading, from \(age). \(account.statusMessage ?? "")")
+            Text((cardsSayAge ? "Showing the last reading. " : "Last reading, from \(age). ") + (account.statusMessage ?? ""))
                 .font(.system(size: 12)).foregroundStyle(.secondary)
         } else if account.session == nil && account.weekly == nil {
             Text(account.statusMessage ?? "No usage available yet.")
