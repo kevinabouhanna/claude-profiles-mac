@@ -30,7 +30,7 @@ usage, and opens into a Liquid Glass dropdown with the detail.
 | | |
 |---|---|
 | 📊 **Usage at a glance** | Session and weekly percentages in the menu bar, with pace and reset times in the dropdown for any account, not only the one in use. Per-model limits (Fable's is hidden by default) can be shown in Settings → General. When the last reading is more than 10 minutes old, the numbers dim and the dropdown says when it last checked. |
-| 📏 **Know your pace** | A marker on each bar shows where even usage would put you, and a forecast says whether you'll run out before the reset. The colours say how close you are to running out: orange when a session or week won't last until it resets, red from 80% of a session or when a week runs out a day early. |
+| 📏 **Know your pace** | A marker on each bar shows where even usage would put you, and a forecast says whether you'll run out before the reset. The colours say how close you are to running out: orange when a session or week won't last until it resets, red from 80% used or when a week is far over pace. |
 | 🔁 **Quick switching** | The status bar at the bottom of the dropdown always says which account Claude Code is using; its Switch menu lists every account with its numbers. |
 | 🏷️ **Name your accounts** | Call them Work, Personal or anything else, spaces included, instead of reading email addresses. |
 | 🤖 **Auto-Switch** | Optionally moves to another account when the active one nears its limit (`cswap auto`). |
