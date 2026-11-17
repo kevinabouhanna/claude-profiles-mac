@@ -171,6 +171,10 @@ final class Store: ObservableObject {
                     store.problem = nil
                     // Before the redraw this refresh asks for, so it draws the new forecast.
                     UsageHistory.shared.record(store.accounts)
+                    // The accounts arrive after launch, so credits wait for them (code review
+                    // of #75); only accounts not checked for 90% of its interval are.
+                    let credits = CreditsMonitor.shared
+                    credits.checkAll(olderThan: credits.interval * 0.9)
                 } else {
                     store.problem = "Couldn't read usage from cswap. Showing the last reading."
                 }

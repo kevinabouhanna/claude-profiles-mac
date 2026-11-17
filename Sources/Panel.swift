@@ -360,6 +360,7 @@ struct StatusBar: View {
 struct PanelView: View {
     @ObservedObject var store: Store
     @ObservedObject private var picker = AccountPickerState.shared
+    @ObservedObject private var credits = CreditsMonitor.shared
     var openSettings: () -> Void = {}
 
     var body: some View {
@@ -388,7 +389,10 @@ struct PanelView: View {
         HStack(spacing: 12) {
             Text("Claude Profiles").font(.system(size: 15, weight: .bold)).foregroundColor(.primary)
             Spacer()
-            Button { store.refresh() } label: {
+            Button {
+                store.refresh()
+                credits.checkAll(olderThan: 60)
+            } label: {
                 Image(systemName: "arrow.clockwise").foregroundColor(.primary.opacity(store.loading ? 0.3 : 0.75))
             }
             .buttonStyle(.plain)
@@ -415,6 +419,9 @@ struct PanelView: View {
                 badge: "Weekly",
                 window: account.modelWindow(raw)
             )
+        }
+        if let line = credits.line(for: account) {
+            CreditsCard(line: line)
         }
         if account.carriedOver {
             // Old cards already say when they last checked (#34); this adds only why.

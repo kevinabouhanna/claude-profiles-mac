@@ -146,6 +146,7 @@ struct GeneralPane: View {
                 Text("Per-Model Limits")
                 Text("A model's own weekly limit, in the dropdown and, if you include them, the menu bar.")
             }
+            CreditsSection()
             Section("Notifications") {
                 Toggle(isOn: $prefs.notifyOnSwitch) {
                     Text("Notify When the Account Changes")

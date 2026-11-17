@@ -3,7 +3,19 @@
   "defaults": {
     "accountNicknames": {"work@example.com": "Work", "personal@example.com": "Personal"},
     "autoSwitchEnabled": true,
-    "hiddenModelLimits": ["Fable"]
+    "hiddenModelLimits": ["Fable"],
+    "showAPICredits": true,
+    "apiCreditsSignIns": {"work@example.com": "5D1C9E0A-7A51-4C55-9C1B-3F0E2A6B8D11"},
+    "apiCredits": {
+      "work@example.com": {
+        "triedAt": "2026-11-10T15:15:00Z",
+        "balance": {
+          "currency": "USD", "totalCents": 7320, "boughtCents": 0, "checkedAt": "2026-11-10T15:15:00Z",
+          "promos": [{"name": "API credit (Max)", "program": "subscription_api_credit", "remainingCents": 7320,
+                      "grantedCents": 10000, "expires": "2026-12-01T00:00:00Z"}]
+        }
+      }
+    }
   },
   "accounts": [
     {

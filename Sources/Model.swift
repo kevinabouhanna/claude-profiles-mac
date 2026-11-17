@@ -11,6 +11,9 @@ struct Account: Decodable, Identifiable {
     let number: Int
     let email: String?
     let organizationName: String?
+    /// The claude.ai organization: the Console lists it too, which tells a Console sign-in
+    /// is this account's (#31).
+    let organizationUuid: String?
     let alias: String?
     let disabled: Bool?
     let active: Bool?
@@ -23,7 +26,7 @@ struct Account: Decodable, Identifiable {
     var id: Int { number }
 
     enum CodingKeys: String, CodingKey {
-        case number, email, organizationName, alias, disabled, active, usageStatus, usage, usageFetchedAt
+        case number, email, organizationName, organizationUuid, alias, disabled, active, usageStatus, usage, usageFetchedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -31,6 +34,7 @@ struct Account: Decodable, Identifiable {
         number = try c.decode(Int.self, forKey: .number)
         email = try? c.decode(String.self, forKey: .email)
         organizationName = try? c.decode(String.self, forKey: .organizationName)
+        organizationUuid = try? c.decode(String.self, forKey: .organizationUuid)
         alias = try? c.decode(String.self, forKey: .alias)
         disabled = try? c.decode(Bool.self, forKey: .disabled)
         active = try? c.decode(Bool.self, forKey: .active)

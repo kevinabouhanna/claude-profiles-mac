@@ -2,7 +2,9 @@
 
 A menu bar app (AppKit + SwiftUI, built with plain `swiftc` by `build.sh`, no Xcode project)
 that shows Claude Code usage and switches accounts through the `cswap` CLI from
-[claude-swap](https://github.com/realiti4/claude-swap). It never touches credentials itself.
+[claude-swap](https://github.com/realiti4/claude-swap). It never touches credentials itself; the
+optional Console sign-in for API credits (#31, `Credits.swift`) stays in a WebKit data store per
+account, which the app never reads.
 
 ## Rules
 
@@ -52,7 +54,11 @@ through without asking. What's particular to this repo:
 - cswap's own log: `~/.claude-swap-backup/claude-swap.log` (every switch, renewed sign-in and
   usage fetch). A switch cswap refused isn't in it; the app's log has those.
 - The app's: `log show --last 1d --predicate 'subsystem == "com.kevinabouhanna.ClaudeProfiles"'`
-  (category `switch`: background Claude helpers stopped for a switch, #61; `energy`: EnergyGuard).
+  (category `switch`: background Claude helpers stopped for a switch, #61; `energy`: EnergyGuard;
+  `credits`: each API credits check and why one failed, #31).
+- API credits against the real Console: `"build/Claude Profiles.app/Contents/MacOS/ClaudeProfiles" --console-check`
+  (a new sign-in must read as signed out); launching it with `-previewConsoleSignIn someone@example.com`
+  shows the sign-in window for a made-up account, in a VM.
 - Is a switch blocked? Live Claude sessions on an account's own sign-in are listed in
   `~/.claude-swap-backup/sessions/<n>-<email>/sessions/<pid>.json`; `ps -o ppid=,tty=,args= -p <pid>`
   shows whose they are.

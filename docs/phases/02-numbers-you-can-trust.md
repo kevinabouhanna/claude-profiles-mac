@@ -1,6 +1,6 @@
 # Phase 2: Numbers you can trust
 
-**Milestone:** Phase 2: Numbers you can trust · **Status:** Now
+**Milestone:** Phase 2: Numbers you can trust · **Status:** Later
 
 **Goal:** what the menu bar and the dropdown say is what Claude says, and the colours and the
 forecast tell you something true about your usage.
