@@ -811,8 +811,11 @@ enum Debug {
         func weekly(_ pct: Double, gone: Double) -> Window {
             Window(raw: raw(pct, resetIn: (1 - gone) * weekPeriod), period: weekPeriod, fetchedAt: now, now: now)
         }
-        check("session 48% is orange, however fast", session(48, gone: 0.31).severity == .warning)
-        check("session 39% is green, however fast", session(39, gone: 0.05).severity == .fine)
+        check("session running out before its reset is orange", session(48, gone: 0.31).severity == .warning)
+        // #68: 44% with 68% gone is on track for 64%, so it lasts.
+        check("session on track to last is green", session(44, gone: 0.68).severity == .fine)
+        check("session in its first minutes goes by amount", session(39, gone: 0.04).severity == .fine
+              && session(45, gone: 0.04).severity == .warning)
         check("session 80% is red, even under pace", session(80, gone: 0.9).severity == .critical)
         check("weekly on track to last is green", weekly(71, gone: 0.74).severity == .fine)
         check("weekly out a few hours early is orange", weekly(82, gone: 0.78).severity == .warning)
