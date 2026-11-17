@@ -54,8 +54,10 @@ struct CreditBalance: Codable, Equatable {
     }
 
     /// Several API organizations under one sign-in, as one balance.
-    static func sum(_ all: [CreditBalance], checkedAt: Date) -> CreditBalance {
-        CreditBalance(
+    /// Only the first one's currency counts: dollars and euros don't add up (code review of #75).
+    static func sum(_ given: [CreditBalance], checkedAt: Date) -> CreditBalance {
+        let all = given.filter { $0.currency == given.first?.currency }
+        return CreditBalance(
             currency: all.first?.currency ?? "USD",
             totalCents: all.reduce(0) { $0 + $1.totalCents },
             boughtCents: all.reduce(0) { $0 + $1.boughtCents },
@@ -235,10 +237,14 @@ final class CreditsMonitor: ObservableObject {
             .compactMapValues(UUID.init(uuidString:))
     }
 
-    var enabled: Bool { Prefs.shared.showAPICredits }
+    /// The setting, mirrored here so the dropdown watches this alone, not every setting
+    /// (code review of #75).
+    @Published private(set) var enabled = Prefs.shared.showAPICredits
 
+    /// Nothing for an account signed out of the Console, whatever is stored for it.
     func line(for account: Account) -> CreditsLine? {
-        Credits.line(records[account.nicknameKey], enabled: enabled)
+        guard isSignedIn(account) else { return nil }
+        return Credits.line(records[account.nicknameKey], enabled: enabled)
     }
 
     func isSignedIn(_ account: Account) -> Bool { signIns[account.nicknameKey] != nil }
@@ -247,6 +253,7 @@ final class CreditsMonitor: ObservableObject {
 
     /// Runs the timer only while there's something to check.
     func sync() {
+        if enabled != Prefs.shared.showAPICredits { enabled = Prefs.shared.showAPICredits }
         timer?.invalidate()
         timer = nil
         guard enabled, !signIns.isEmpty else { return }
@@ -291,6 +298,8 @@ final class CreditsMonitor: ObservableObject {
     }
 
     private func record(_ outcome: ConsoleCheck.Outcome, for key: String) {
+        // Signed out while it ran (code review of #75): nothing to keep.
+        guard signIns[key] != nil else { return }
         var record = records[key] ?? CreditsRecord()
         record.triedAt = clock()
         switch outcome {
@@ -308,10 +317,13 @@ final class CreditsMonitor: ObservableObject {
 
     // MARK: Signing in and out
 
-    /// Opens the Console in a window of its own for this account.
+    /// Opens the Console in a window of its own for this account: to sign in, or, once
+    /// signed in, to look at the Billing page (which then stays open).
     func signIn(_ account: Account) {
-        let store = signIns[account.nicknameKey] ?? UUID()
-        ConsoleSignInWindow.show(for: account, store: store)
+        let key = account.nicknameKey
+        let problem = records[key]?.problem
+        let looking = signIns[key] != nil && problem != .signedOut && problem != .wrongAccount
+        ConsoleSignInWindow.show(for: account, store: signIns[key] ?? UUID(), mode: looking ? .billing : .signIn)
     }
 
     /// Called by the sign-in window once the Console answers as signed in.
@@ -331,13 +343,30 @@ final class CreditsMonitor: ObservableObject {
         records[key] = nil
         save()
         sync()
-        Task { try? await WKWebsiteDataStore.remove(forIdentifier: store) }
+        Self.remove(store)
     }
 
     /// A data store made for a sign-in that was given up.
     func discard(_ store: UUID) {
         guard !signIns.values.contains(store) else { return }
-        Task { try? await WKWebsiteDataStore.remove(forIdentifier: store) }
+        Self.remove(store)
+    }
+
+    /// Deletes a data store, sign-in and all. WebKit refuses while a web view still uses it
+    /// (a check running, a window closing), so it tries again a few times (code review of #75).
+    private static func remove(_ store: UUID, attempt: Int = 1) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(attempt == 1 ? 1 : 5))
+            do {
+                try await WKWebsiteDataStore.remove(forIdentifier: store)
+            } catch {
+                guard attempt < 4 else {
+                    creditsLog.error("Couldn't delete a Console sign-in: \(error.localizedDescription, privacy: .public)")
+                    return
+                }
+                remove(store, attempt: attempt + 1)
+            }
+        }
     }
 
     // MARK: Storage
@@ -428,13 +457,14 @@ final class ConsoleCheck: NSObject, WKNavigationDelegate {
             let answer = try? await web.callAsyncJavaScript(
                 """
                 const r = await fetch(path, {credentials: 'same-origin', signal: AbortSignal.timeout(15000)});
-                return [r.status, await r.text()];
+                return [r.redirected ? 401 : r.status, await r.text()];
                 """,
                 arguments: ["path": "/api/organizations/\(org)/prepaid/credits"], in: nil, contentWorld: .defaultClient
             )
             guard let pair = answer as? [Any], pair.count == 2, let code = (pair[0] as? NSNumber)?.intValue,
                   let body = pair[1] as? String else { return .problem(.failed, "credits: no answer") }
-            if code == 401 { return .problem(.signedOut, "credits: status 401") }
+            // 401, or sent on to the sign-in page (code review of #75).
+            if code == 401 { return .problem(.signedOut, "credits: signed out") }
             guard code == 200, let balance = CreditBalance.parse(Data(body.utf8), checkedAt: now) else {
                 return .problem(.failed, "credits: status \(code)")
             }
@@ -472,8 +502,19 @@ final class ConsoleSignInWindow: NSObject, WKNavigationDelegate, WKUIDelegate, N
     static let userAgentSuffix = "Version/26.0 Safari/605.1.15"
     private static var open: [String: ConsoleSignInWindow] = [:]
 
+    enum Mode {
+        /// Closes by itself once signed in as the account.
+        case signIn
+        /// Already signed in: the Billing page, to look at. Stays open.
+        case billing
+        /// A made-up account's, for a look in a VM: nothing is kept (`-previewConsoleSignIn`).
+        case preview
+    }
+
     private let account: Account
     private let store: UUID
+    private let mode: Mode
+    private let note: NSTextField
     private let window: NSWindow
     private let web: WKWebView
     private var popups: [NSWindow] = []
@@ -483,20 +524,21 @@ final class ConsoleSignInWindow: NSObject, WKNavigationDelegate, WKUIDelegate, N
     /// the background; this is a person signing in).
     private var poll: Timer?
 
-    static func show(for account: Account, store: UUID) {
+    static func show(for account: Account, store: UUID, mode: Mode) {
         if let existing = open[account.nicknameKey] {
             existing.window.makeKeyAndOrderFront(nil)
             return
         }
-        let sheet = ConsoleSignInWindow(account: account, store: store)
+        let sheet = ConsoleSignInWindow(account: account, store: store, mode: mode)
         open[account.nicknameKey] = sheet
         NSApp.activate()
         sheet.window.makeKeyAndOrderFront(nil)
     }
 
-    private init(account: Account, store: UUID) {
+    private init(account: Account, store: UUID, mode: Mode) {
         self.account = account
         self.store = store
+        self.mode = mode
         let config = WKWebViewConfiguration()
         config.websiteDataStore = WKWebsiteDataStore(forIdentifier: store)
         config.applicationNameForUserAgent = Self.userAgentSuffix
@@ -505,17 +547,19 @@ final class ConsoleSignInWindow: NSObject, WKNavigationDelegate, WKUIDelegate, N
             contentRect: NSRect(x: 0, y: 0, width: 980, height: 760),
             styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false
         )
-        super.init()
-        window.title = "Sign In to the Claude Console"
-        window.isReleasedWhenClosed = false
-        window.delegate = self
-
         let who = account.email.map { "as \($0)" } ?? "with this account"
-        let note = NSTextField(wrappingLabelWithString: """
+        note = NSTextField(wrappingLabelWithString: mode == .billing ? """
+            The Console's Billing page for \(account.displayName). Close this window when you're done.
+            """ : """
             Sign in \(who), the way you sign in to claude.ai. Claude Profiles only reads your API \
             credit balance from the Console; your sign-in stays in this window's own storage, and \
             the app never sees your password. This window closes once you're signed in.
             """)
+        super.init()
+        window.title = mode == .billing ? "Claude Console" : "Sign In to the Claude Console"
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+
         note.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         note.textColor = .secondaryLabelColor
         let content = NSView()
@@ -537,25 +581,40 @@ final class ConsoleSignInWindow: NSObject, WKNavigationDelegate, WKUIDelegate, N
         web.navigationDelegate = self
         web.uiDelegate = self
         if let url = URL(string: Credits.console + "/settings/billing") { web.load(URLRequest(url: url)) }
-        let t = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.checkSignedIn() }
+        if mode != .billing {
+            let t = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.checkSignedIn() }
+            }
+            t.tolerance = 1  // rule 4
+            poll = t
         }
-        t.tolerance = 1  // rule 4
-        poll = t
     }
 
-    /// Signed in once the Console's own list of organizations answers.
+    /// Signed in once the Console's own list of organizations answers, as a list, without being
+    /// sent on to the sign-in page, and it's this account's (code review of #75).
     private func checkSignedIn() {
-        guard !done, web.url?.host?.hasSuffix("platform.claude.com") == true else { return }
+        guard !done, mode != .billing, web.url?.host?.hasSuffix("platform.claude.com") == true else { return }
         Task { @MainActor in
             let answer = try? await web.callAsyncJavaScript(
-                "const r = await fetch('/api/organizations', {credentials: 'same-origin'}); return r.status;",
+                """
+                const r = await fetch('/api/organizations', {credentials: 'same-origin'});
+                return r.ok && !r.redirected ? await r.text() : '';
+                """,
                 arguments: [:], in: nil, contentWorld: .defaultClient
             )
-            guard !done, (answer as? NSNumber)?.intValue == 200 else { return }
+            guard !done, let text = answer as? String, let orgs = ConsoleOrgs.parse(Data(text.utf8)) else { return }
+            guard orgs.matches(account.organizationUuid) else {
+                let who = account.email ?? account.displayName
+                note.stringValue = """
+                    This Console is signed in to a different account than \(who). Sign out of it (your \
+                    name at the bottom left, then Log out) and sign in as \(who).
+                    """
+                note.textColor = .systemOrange
+                return
+            }
             done = true
             poll?.invalidate()
-            CreditsMonitor.shared.signedIn(account, store: store)
+            if mode == .signIn { CreditsMonitor.shared.signedIn(account, store: store) }
             window.close()
         }
     }
@@ -597,7 +656,7 @@ final class ConsoleSignInWindow: NSObject, WKNavigationDelegate, WKUIDelegate, N
         web.stopLoading()
         web.navigationDelegate = nil
         web.uiDelegate = nil
-        if !done { CreditsMonitor.shared.discard(store) }
+        if !done || mode == .preview { CreditsMonitor.shared.discard(store) }
         poll?.invalidate()
         poll = nil
         Self.open[account.nicknameKey] = nil

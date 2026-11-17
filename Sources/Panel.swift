@@ -361,7 +361,6 @@ struct PanelView: View {
     @ObservedObject var store: Store
     @ObservedObject private var picker = AccountPickerState.shared
     @ObservedObject private var credits = CreditsMonitor.shared
-    @ObservedObject private var prefs = Prefs.shared
     var openSettings: () -> Void = {}
 
     var body: some View {

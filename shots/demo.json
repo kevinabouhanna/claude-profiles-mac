@@ -5,6 +5,7 @@
     "autoSwitchEnabled": true,
     "hiddenModelLimits": ["Fable"],
     "showAPICredits": true,
+    "apiCreditsSignIns": {"work@example.com": "5D1C9E0A-7A51-4C55-9C1B-3F0E2A6B8D11"},
     "apiCredits": {
       "work@example.com": {
         "triedAt": "2026-11-10T15:15:00Z",

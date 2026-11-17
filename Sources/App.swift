@@ -472,7 +472,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // account, for a look at it in a VM (#31). A sign-in made there is thrown away on close.
         if let email = UserDefaults.standard.string(forKey: "previewConsoleSignIn"),
            let account = try? JSONDecoder().decode(Account.self, from: JSONSerialization.data(withJSONObject: ["number": 0, "email": email])) {
-            ConsoleSignInWindow.show(for: account, store: UUID())
+            ConsoleSignInWindow.show(for: account, store: UUID(), mode: .preview)
         }
     }
 
@@ -1161,6 +1161,10 @@ enum Debug {
         check("only real organization ids are used", consoleOrgs?.all.count == 2)
         check("the Console signed in as this account is accepted", consoleOrgs?.matches("0ABCB734-0000-4000-8000-000000000001") == true)
         check("the Console signed in as another account is refused", consoleOrgs?.matches("27fb77c0-0000-4000-8000-000000000003") == false)
+        var euros = bought!
+        euros.currency = "EUR"
+        check("dollars and euros aren't added together",
+              CreditBalance.sum([maxCredits!, euros], checkedAt: creditsNow).totalCents == 10000)
         let roundTrip = CreditsMonitor.encode(["a@example.com": record(mixed, .failed)]).flatMap(CreditsMonitor.decode)
         check("credit records survive a relaunch", roundTrip?["a@example.com"] == record(mixed, .failed))
 
