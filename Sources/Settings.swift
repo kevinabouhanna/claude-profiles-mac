@@ -685,7 +685,7 @@ struct MenuBarPane: View {
                     Text("Numbers follow the menu bar's own light or dark color.")
                         .font(.callout).foregroundStyle(.secondary)
                 case .usage:
-                    Text("Session: green under \(Int(Window.warningAt))%, orange from \(Int(Window.warningAt))%, red from \(Int(Window.criticalAt))%. Weekly: orange if it won't last until it resets, red if it runs out a day early or is \(Int(Window.weeklyCriticalAt))% used.")
+                    Text("Orange when it won't last until it resets. Red from \(Int(Window.criticalAt))% of a session, or when a week runs out a day early or is \(Int(Window.weeklyCriticalAt))% used.")
                         .font(.callout).foregroundStyle(.secondary)
                 case .custom:
                     customColorRow("Session", session: true)

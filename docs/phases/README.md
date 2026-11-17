@@ -7,7 +7,8 @@ Each phase is a milestone on GitHub and a page here; each plan is an issue, in t
 
 | Order | Plan | Phase |
 |---|---|---|
-| 4 | #30 prediction logic | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
+| 1 | #68 Session colour follows the forecast: on track to last is green | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
+| 2 | #30 prediction logic | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
 
 ## Next
 

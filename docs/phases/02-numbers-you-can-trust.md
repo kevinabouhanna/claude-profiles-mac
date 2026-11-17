@@ -17,6 +17,8 @@ forecast tell you something true about your usage.
 - #34 **Say when a reading is old** (a bug): Claude's server paused cswap's usage checks for an
   hour and the app showed the last reading as current. A reading over 10 minutes old now dims in
   the menu bar and the dropdown says when it last checked.
+- #68 **Session colour follows the forecast**: a session on track to last until its reset is
+  green (44%, on track for 64%), orange when it will run out first, red from 80%.
 - #30 **A forecast that means something**: "runs out tomorrow" only from the pace you're
   actually using it at, nothing for an account you haven't used in days; or no forecast, only
   over or under pace.

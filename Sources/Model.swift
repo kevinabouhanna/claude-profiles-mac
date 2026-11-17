@@ -242,10 +242,18 @@ struct Window {
     /// 9 minutes of a session or 5 hours of a week, so a reading on pace doesn't flicker.
     static let closeToReset = 0.03
 
-    /// By how much is used: a session always (how close a switch is, not how fast you got
-    /// there), and a week before its forecast shows (85% in the first hours is red, 6% green).
+    /// By how much is used, before a window's forecast shows (its first 5%): too early to
+    /// trust a projection, so 85% in the first hours is red and 6% green.
     static func levelSeverity(_ used: Double) -> Severity {
         used >= criticalAt ? .critical : (used >= warningAt ? .warning : .fine)
+    }
+
+    /// A session with a forecast (#68): orange only when it runs out before its reset, so 44%
+    /// on track for 64% is green; red from 80% used, whatever the pace, as a switch is close.
+    /// `early` is how long before the reset it runs out; nil when it lasts.
+    static func sessionSeverity(_ used: Double, early: TimeInterval?) -> Severity {
+        if used >= criticalAt { return .critical }
+        return early == nil ? .fine : .warning
     }
 
     /// A week with a forecast, by whether it lasts until its reset. `early` is how long
@@ -327,8 +335,9 @@ struct Window {
         pacePct = pace
         forecast = text
         // The colour never says something the sentence under the bar doesn't.
-        severity = period == weekPeriod && hasForecast
-            ? Self.weeklySeverity(measured, early: early) : Self.levelSeverity(measured)
+        severity = !hasForecast ? Self.levelSeverity(measured)
+            : period == weekPeriod ? Self.weeklySeverity(measured, early: early)
+            : Self.sessionSeverity(measured, early: early)
     }
 
     var display: Int { Int(pct.rounded()) }
