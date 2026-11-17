@@ -413,7 +413,7 @@ struct PanelView: View {
             UsageCard(
                 title: raw.name ?? "Model",
                 badge: "Weekly",
-                window: Window(raw: raw, period: weekPeriod, fetchedAt: account.fetchedDate)
+                window: account.modelWindow(raw)
             )
         }
         if account.carriedOver {

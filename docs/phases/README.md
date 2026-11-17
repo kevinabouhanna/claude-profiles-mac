@@ -7,8 +7,7 @@ Each phase is a milestone on GitHub and a page here; each plan is an issue, in t
 
 | Order | Plan | Phase |
 |---|---|---|
-| 1 | #70 Weekly red only when clearly in trouble, not barely over pace | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
-| 2 | #30 prediction logic | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
+| 2 | #30 A forecast from how you're using it now, nothing for an idle account | [Phase 2: Numbers you can trust](02-numbers-you-can-trust.md) |
 
 ## Next
 

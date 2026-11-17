@@ -263,9 +263,48 @@ struct Window {
         return week && overPace >= weeklyFarOverPace ? .critical : .warning
     }
 
+    /// How you're using a window now (#30), from the readings the app remembers.
+    enum RecentUse: Equatable {
+        /// Not gone up since `since` for longer than `idleAfter`: no run-out time.
+        case idle(since: Date)
+        /// Points per second over the last `lookback`.
+        case rate(Double)
+    }
+
+    /// A week's pace is the last day's ("if you keep going like this"), so a night's sleep
+    /// is in it; a session's the last hour's. Unchanged for 12 hours, or 30 minutes, is idle.
+    static func lookback(_ period: TimeInterval) -> TimeInterval { period == weekPeriod ? 86400 : 3600 }
+    static func idleAfter(_ period: TimeInterval) -> TimeInterval { period == weekPeriod ? 12 * 3600 : 1800 }
+
+    /// Nil when too little is remembered to say, or the readings don't match this one.
+    static func recentUse(
+        _ history: [Reading], measured: Double, at measuredAt: Date, start: Date, period: TimeInterval
+    ) -> RecentUse? {
+        let readings = history.filter { $0.at >= start && $0.at <= measuredAt }
+        guard let last = readings.last, last.pct == measured else { return nil }
+        // The last reading is when this figure was first seen: still unchanged since.
+        if measuredAt.timeIntervalSince(last.at) >= idleAfter(period) { return .idle(since: last.at) }
+        let from = measuredAt - lookback(period)
+        let rate: Double
+        if from <= start {
+            rate = measured / max(1, measuredAt.timeIntervalSince(start))  // the window is younger
+        } else if let then = readings.last(where: { $0.at <= from }) {
+            // Over the time since that reading, which is longer than the lookback when the app
+            // wasn't running in between (code review of #72): its use is spread over all of it.
+            rate = (measured - then.pct) / measuredAt.timeIntervalSince(then.at)
+        } else if let first = readings.first, measuredAt.timeIntervalSince(first.at) >= lookback(period) / 4 {
+            // Remembered for less than the lookback (the app is new here): what there is.
+            rate = (measured - first.pct) / measuredAt.timeIntervalSince(first.at)
+        } else {
+            return nil
+        }
+        // Unchanged for less than `idleAfter` isn't idle yet (code review of #72): the straight line.
+        return rate > 0 ? .rate(rate) : nil
+    }
+
     init(
         raw: RawWindow?, period: TimeInterval, fetchedAt: Date?, now: Date = clock(),
-        staleAfter: TimeInterval = staleLimit
+        staleAfter: TimeInterval = staleLimit, history: [Reading]? = nil
     ) {
         var measured = raw?.pct ?? 0
         var reset = raw?.resetsAt.flatMap(parseISO)
@@ -305,30 +344,43 @@ struct Window {
             if measured == 0 {
                 text = "Nothing used yet"
                 hasForecast = true
-            } else if fraction >= 0.05 {  // straight-line projection: wildly noisy before this
+            } else if fraction >= 0.05 {  // a projection is wildly noisy before this
                 hasForecast = true
-                let projected = measured / fraction
                 let gap = Int(abs(delta).rounded())
-                if projected >= 100 {
-                    let out = start + period * fraction * (100 / measured)
-                    let before = reset.timeIntervalSince(out)
-                    let lead = gap >= 1 ? "\(gap)% over pace" : "On pace"
-                    if measured >= 100 {
-                        text = "Limit reached"
-                    } else if out <= now {
-                        // Worked out from an earlier reading, its run-out time has passed.
-                        text = "May have run out by now"
-                        early = before
-                    } else if before < period * Self.closeToReset {
-                        // A time minutes before the reset would read as a warning.
-                        text = "\(lead) · runs out about when it resets"
+                let lead = gap < 1 ? "On pace" : "\(gap)% \(delta > 0 ? "over" : "under") pace"
+                // How fast it's going up now (#30); without enough remembered, the straight
+                // line from the window's start, as before.
+                let rate: Double
+                switch history.flatMap({ Self.recentUse($0, measured: measured, at: measuredAt, start: start, period: period) }) {
+                case .idle(let since)?:
+                    rate = 0
+                    text = "\(lead) · not used for \(idleText(measuredAt.timeIntervalSince(since)))"
+                case .rate(let r)?:
+                    rate = r
+                case nil:
+                    rate = measured / max(1, measuredAt.timeIntervalSince(start))
+                }
+                if measured >= 100 {
+                    text = "Limit reached"
+                } else if rate > 0 {
+                    let projected = measured + rate * reset.timeIntervalSince(measuredAt)
+                    if projected >= 100 {
+                        let out = measuredAt + (100 - measured) / rate
+                        let before = reset.timeIntervalSince(out)
+                        if out <= now {
+                            // Worked out from an earlier reading, its run-out time has passed.
+                            text = "May have run out by now"
+                            early = before
+                        } else if before < period * Self.closeToReset {
+                            // A time minutes before the reset would read as a warning.
+                            text = "\(lead) · runs out about when it resets"
+                        } else {
+                            text = "\(lead) · runs out \(formatWhen(out))"
+                            early = before
+                        }
                     } else {
-                        text = "\(lead) · runs out \(formatWhen(out))"
-                        early = before
+                        text = "\(lead) · on track for \(Int(projected.rounded()))%"
                     }
-                } else {
-                    let lead = gap >= 1 ? "\(gap)% under pace" : "On pace"
-                    text = "\(lead) · on track for \(Int(projected.rounded()))%"
                 }
             }
         }
@@ -365,12 +417,31 @@ func formatWhen(_ date: Date, now: Date = clock()) -> String {
     return "\(dayFormatter.string(from: date)), \(clock)"
 }
 
+/// "40 min", "14 h", "3 days": how long usage has stood still, at least.
+func idleText(_ seconds: TimeInterval) -> String {
+    let minutes = Int(seconds / 60)
+    if minutes < 60 { return "\(minutes) min" }
+    let hours = minutes / 60
+    return hours < 48 ? "\(hours) h" : "\(hours / 24) days"
+}
+
 extension Account {
     var session: Window? {
-        usage?.fiveHour.map { Window(raw: $0, period: fiveHourPeriod, fetchedAt: fetchedDate) }
+        usage?.fiveHour.map {
+            Window(raw: $0, period: fiveHourPeriod, fetchedAt: fetchedDate,
+                   history: UsageHistory.shared.readings(self, "5h"))
+        }
     }
     var weekly: Window? {
-        usage?.sevenDay.map { Window(raw: $0, period: weekPeriod, fetchedAt: fetchedDate) }
+        usage?.sevenDay.map {
+            Window(raw: $0, period: weekPeriod, fetchedAt: fetchedDate,
+                   history: UsageHistory.shared.readings(self, "7d"))
+        }
+    }
+    /// A per-model weekly limit, such as Fable's.
+    func modelWindow(_ raw: RawWindow) -> Window {
+        Window(raw: raw, period: weekPeriod, fetchedAt: fetchedDate,
+               history: UsageHistory.shared.readings(self, UsageHistory.name(model: raw.name)))
     }
 }
 

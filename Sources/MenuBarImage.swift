@@ -169,7 +169,7 @@ enum MenuBarImage {
         }
         if style.showModelLimits, let account {
             for raw in ModelLimits.visible(account) {
-                let window = Window(raw: raw, period: weekPeriod, fetchedAt: account.fetchedDate)
+                let window = account.modelWindow(raw)
                 out.append(make(String((raw.name ?? "M").prefix(1)), window, .weekly))
             }
         }
