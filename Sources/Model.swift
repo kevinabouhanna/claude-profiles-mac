@@ -223,9 +223,25 @@ struct Window {
     let pacePct: Double?
     /// The sentence under the bar. Nil when there is nothing meaningful to say yet.
     let forecast: String?
+    /// How close you are to running out (#20): the colour of the number, the bar and the sentence.
     let severity: Severity
 
-    enum Severity { case fine, overPace, critical }
+    enum Severity { case fine, warning, critical }
+
+    /// The 5-hour session goes by how much is used: Auto-Switch moves you when it's nearly
+    /// full, so that's what the colour warns about, not how fast you got there.
+    static func sessionSeverity(_ used: Double) -> Severity {
+        used >= 80 ? .critical : (used >= 40 ? .warning : .fine)
+    }
+
+    /// A week goes by whether it lasts until its reset: orange when it runs out before,
+    /// red when a day or more before, or nearly all used. Only once the forecast shows,
+    /// so the colour never says something the sentence under the bar doesn't.
+    static func weeklySeverity(_ used: Double, runsOut: Date?, reset: Date?) -> Severity {
+        if used >= 90 { return .critical }
+        guard let runsOut, let reset, runsOut < reset else { return .fine }
+        return reset.timeIntervalSince(runsOut) > 86400 ? .critical : .warning
+    }
 
     init(raw: RawWindow?, period: TimeInterval, fetchedAt: Date?, now: Date = clock()) {
         var measured = raw?.pct ?? 0
@@ -249,11 +265,16 @@ struct Window {
 
         pct = measured
         resetsAt = reset
+        let session = period != weekPeriod
+        // runsOut: nil while there's no forecast, or it lasts until the reset.
+        func rate(runsOut: Date?) -> Severity {
+            session ? Self.sessionSeverity(measured) : Self.weeklySeverity(measured, runsOut: runsOut, reset: reset)
+        }
 
         guard let reset else {
             pacePct = nil
             forecast = nil
-            severity = measured >= 90 ? .critical : .fine
+            severity = rate(runsOut: nil)
             return
         }
 
@@ -261,26 +282,35 @@ struct Window {
         let fraction = min(1, max(0, measuredAt.timeIntervalSince(start) / period))
         let pace = fraction * 100
         pacePct = pace
-
         let delta = measured - pace
-        severity = measured >= 90 || delta >= 15 ? .critical : (delta >= 1 ? .overPace : .fine)
 
         // Straight-line projection: wildly noisy in the first moments of a window.
         guard fraction >= 0.05 else {
             forecast = measured == 0 ? "Nothing used yet" : nil
+            severity = rate(runsOut: nil)
             return
         }
         if measured == 0 {
             forecast = "Nothing used yet"
+            severity = rate(runsOut: nil)
             return
         }
         let projected = measured / fraction
         let gap = Int(abs(delta).rounded())
         if projected >= 100 {
-            let runsOut = start + period * fraction * (100 / measured)
-            let lead = gap >= 1 ? "\(gap)% over pace" : "On pace"
-            forecast = measured >= 100 ? "Limit reached" : "\(lead) · runs out \(formatWhen(runsOut))"
+            let out = start + period * fraction * (100 / measured)
+            severity = rate(runsOut: out)
+            if measured >= 100 {
+                forecast = "Limit reached"
+            } else if gap < 1 {
+                // Runs out within moments of the reset: a time a few minutes before it reads
+                // like a warning that "On pace" contradicts.
+                forecast = "On pace · runs out about when it resets"
+            } else {
+                forecast = "\(gap)% over pace · runs out \(formatWhen(out))"
+            }
         } else {
+            severity = rate(runsOut: nil)
             let lead = gap >= 1 ? "\(gap)% under pace" : "On pace"
             forecast = "\(lead) · on track for \(Int(projected.rounded()))%"
         }
